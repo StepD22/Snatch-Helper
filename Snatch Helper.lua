@@ -1,9 +1,10 @@
 ---@diagnostic disable: undefined-global, need-check-nil, lowercase-global, cast-local-type, unused-local
 
 script_name("Snatch Helper")
-script_description('Улучшенный помощник с биндером, горячими клавишами, селектором и темами')
+math.randomseed(os.time() + math.floor(os.clock() * 1000))
+
 script_author("StepD")
-script_version("5.2") -- увеличил версию
+script_version("5.2") -- ГіГўГҐГ«ГЁГ·ГЁГ« ГўГҐГ°Г±ГЁГѕ
 
 require('lib.moonloader')
 require('encoding').default = 'CP1251'
@@ -21,7 +22,7 @@ local u8 = encoding.UTF8
 local new, str, sizeof = imgui.new, ffi.string, ffi.sizeof
 local sizeX, sizeY = getScreenResolution()
 
--- ==================== ЛОКАЛЬНЫЕ ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ====================
+-- ==================== Г‹ГЋГЉГЂГ‹ГњГЌГ›Г… ГѓГ‹ГЋГЃГЂГ‹ГњГЌГ›Г… ГЏГ…ГђГ…ГЊГ…ГЌГЌГ›Г… ====================
 local isActiveCommand = false
 local isActiveWantedCommand = false
 local activeBinder = false
@@ -34,7 +35,7 @@ local script_advanced_list = {}
 local selectorActive = false
 local selectorTargetId = nil
 
--- ==================== АНИМАЦИЯ ОКНА ====================
+-- ==================== ГЂГЌГ€ГЊГЂГ–Г€Гџ ГЋГЉГЌГЂ ====================
 local ui_meta = {
     __index = function(self, v)
         if v == "switch" then
@@ -70,14 +71,14 @@ local ui_meta = {
 
 local mainWindow = { state = false, duration = 0.2 }
 setmetatable(mainWindow, ui_meta)
-local mainWindowOpen = imgui.new.bool(false)  -- для синхронизации с крестиком
+local mainWindowOpen = imgui.new.bool(false)  -- Г¤Г«Гї Г±ГЁГ­ГµГ°Г®Г­ГЁГ§Г Г¶ГЁГЁ Г± ГЄГ°ГҐГ±ГІГЁГЄГ®Г¬
 local keyBindContext = nil -- "bind", "stop", "selector"
 
--- ==================== КОНФИГУРАЦИЯ ====================
+-- ==================== ГЉГЋГЌГ”Г€ГѓГ“ГђГЂГ–Г€Гџ ====================
 local configDirectory = getWorkingDirectory():gsub('\\','/') .. "/Snatch Helper"
 local settings = {
     defaultDelay = 1500,
-    stopKey = 0x7B,        -- F12 по умолчанию
+    stopKey = 0x7B,        -- F12 ГЇГ® ГіГ¬Г®Г«Г·Г Г­ГЁГѕ
     stopKeyMod = 0,
     selectorKey = 0x12,     -- Alt
     selectorKeyMod = 0,
@@ -105,7 +106,7 @@ function trimAll(s)
     if not s then return s end
     return s:gsub("^[%s%c]*", ""):gsub("[%s%c]*$", "")
 end
--- ==================== ЦВЕТОВЫЕ ТЕМЫ ====================
+-- ==================== Г–Г‚Г…Г’ГЋГ‚Г›Г… Г’Г…ГЊГ› ====================
 local colorThemes = {
     default = {
         bg_dark      = imgui.ImVec4(0.08, 0.08, 0.08, 0.98),
@@ -159,23 +160,59 @@ local colorThemes = {
     }
 }
 
--- ==================== СТИЛЕВЫЕ ФУНКЦИИ ====================
-function createStyledButton(label, width, height, isAccent)
-    local colors = {
-        primary = imgui.ImVec4(0.85, 0.18, 0.18, 1.00),
-        primary_dark = imgui.ImVec4(0.65, 0.12, 0.12, 1.00),
-        primary_light = imgui.ImVec4(0.95, 0.30, 0.30, 1.00),
-        gradient = imgui.ImVec4(0.90, 0.22, 0.22, 0.90),
-        secondary = imgui.ImVec4(0.25, 0.25, 0.25, 0.85),
-        secondary_hover = imgui.ImVec4(0.35, 0.35, 0.35, 0.85),
-        text = imgui.ImVec4(0.98, 0.98, 0.98, 1.00)
+local function getActiveTheme()
+    return colorThemes[settings.currentTheme] or colorThemes.default
+end
+
+    local theme = getActiveTheme()
+        primary = theme.accent_primary,
+        primary_dark = theme.accent_dark,
+        primary_light = theme.accent_secondary,
+        gradient = theme.accent_gradient,
+        text = theme.text_primary
+    local theme = getActiveTheme()
+        imgui.PushStyleColor(imgui.Col.Text, theme.accent_primary)
+        imgui.PushStyleColor(imgui.Col.Text, theme.accent_secondary)
+        imgui.PushStyleColor(imgui.Col.Text, theme.accent_gradient)
+    imgui.GetStyle().Colors[imgui.Col.Separator] = getActiveTheme().accent_gradient
+local idCounter = 0
+    idCounter = (idCounter + 1) % 0xFFFFFF
+    return string.format("%x%x%x", os.time(), math.floor(os.clock() * 100000), idCounter)
+end
+
+local function normalizeBind(bind)
+    if type(bind) ~= "table" then return nil end
+    local normalized = {
+        id = tostring(bind.id or generateId()),
+        name = trimAll(tostring(bind.name or "")),
+        cmd = trimAll(tostring(bind.cmd or "")):gsub("^/", ""),
+        steps = type(bind.steps) == "table" and bind.steps or splitSteps(tostring(bind.steps or "")),
+        delay = math.max(0, tonumber(bind.delay) or settings.defaultDelay),
+        key = tonumber(bind.key) or 0,
+        key_mod = tonumber(bind.key_mod) or 0,
     }
-    local buttonColor, hoverColor, activeColor
-    if isAccent then
-        buttonColor = colors.primary
-        hoverColor = colors.primary_light
-        activeColor = colors.primary_dark
+    return normalized
+    local loaded = {}
+    local usedIds = {}
+                    for _, bind in ipairs(data) do
+                        local normalized = normalizeBind(bind)
+                        if normalized then
+                            while usedIds[normalized.id] do
+                                normalized.id = generateId()
+                            end
+                            usedIds[normalized.id] = true
+                            table.insert(loaded, normalized)
+                        end
+                    binds = loaded
     else
+    local normalizedBinds = {}
+    for _, bind in ipairs(binds) do
+        local normalized = normalizeBind(bind)
+        if normalized then
+            table.insert(normalizedBinds, normalized)
+        end
+    end
+    binds = normalizedBinds
         buttonColor = colors.secondary
         hoverColor = colors.gradient
         activeColor = colors.primary_dark
@@ -235,11 +272,11 @@ function createStyledSeparator()
     imgui.GetStyle().Colors[imgui.Col.Separator] = originalSeparatorColor
 end
 
--- ==================== БИНДЕР ====================
+-- ==================== ГЃГ€ГЌГ„Г…Гђ ====================
 local binds = {}
 local bindsConfigFile = configDirectory .. "/binds.json"
 
--- Переменные интерфейса
+-- ГЏГҐГ°ГҐГ¬ГҐГ­Г­Г»ГҐ ГЁГ­ГІГҐГ°ГґГҐГ©Г±Г 
 local searchBuf = ffi.new("char[64]")
 local selectedBindIndex = nil
 local editNameBuf = ffi.new("char[256]")
@@ -249,18 +286,18 @@ local editDelayBuf = ffi.new("int[1]", 1500)
 local editKeyBuf = ffi.new("int[1]", 0)
 local editKeyModBuf = ffi.new("int[1]", 0)
 
--- Для окна выбора клавиши
+-- Г„Г«Гї Г®ГЄГ­Г  ГўГ»ГЎГ®Г°Г  ГЄГ«Г ГўГЁГёГЁ
 local keyBindPopupActive = false
 local tempKey = 0
 local tempMod = 0
 local waitingForKey = false
 
--- Индекс для быстрого поиска по команде
+-- Г€Г­Г¤ГҐГЄГ± Г¤Г«Гї ГЎГ»Г±ГІГ°Г®ГЈГ® ГЇГ®ГЁГ±ГЄГ  ГЇГ® ГЄГ®Г¬Г Г­Г¤ГҐ
 local cmdToBind = {}
-local keyToBind = {}  -- для горячих клавиш
-local registeredCommands = {} -- список зарегистрированных команд
+local keyToBind = {}  -- Г¤Г«Гї ГЈГ®Г°ГїГ·ГЁГµ ГЄГ«Г ГўГЁГё
+local registeredCommands = {} -- Г±ГЇГЁГ±Г®ГЄ Г§Г Г°ГҐГЈГЁГ±ГІГ°ГЁГ°Г®ГўГ Г­Г­Г»Гµ ГЄГ®Г¬Г Г­Г¤
 
--- Подтверждение удаления
+-- ГЏГ®Г¤ГІГўГҐГ°Г¦Г¤ГҐГ­ГЁГҐ ГіГ¤Г Г«ГҐГ­ГЁГї
 local deleteConfirmation = { active = false, index = nil }
 
 function splitSteps(text)
@@ -307,10 +344,10 @@ function registerBindCommands()
     unregisterBindCommands()
     for _, bind in ipairs(binds) do
         if bind.cmd and bind.cmd ~= "" then
-            local cmd = bind.cmd  -- уже без слеша
+            local cmd = bind.cmd  -- ГіГ¦ГҐ ГЎГҐГ§ Г±Г«ГҐГёГ 
             local success = sampRegisterChatCommand(cmd, function(args)
                 if activeBinder then
-                    sampAddChatMessage("[Snatch Helper] Бинд уже выполняется", 0xFF0000)
+                    sampAddChatMessage("[Snatch Helper] ГЃГЁГ­Г¤ ГіГ¦ГҐ ГўГ»ГЇГ®Г«Г­ГїГҐГІГ±Гї", 0xFF0000)
                     return
                 end
                 local argList = {}
@@ -344,7 +381,7 @@ function loadBinds()
                         if not bind.key then bind.key = 0 end
                         if not bind.key_mod then bind.key_mod = 0 end
                     end
-                    print("[Snatch Helper] Загружено биндов: " .. #binds)
+                    print("[Snatch Helper] Г‡Г ГЈГ°ГіГ¦ГҐГ­Г® ГЎГЁГ­Г¤Г®Гў: " .. #binds)
                 else
                     binds = {}
                 end
@@ -373,7 +410,7 @@ function saveBinds()
 end
 
 loadBinds()
--- Таблица простых переменных {var}
+-- Г’Г ГЎГ«ГЁГ¶Г  ГЇГ°Г®Г±ГІГ»Гµ ГЇГҐГ°ГҐГ¬ГҐГ­Г­Г»Гµ {var}
 local simpleVariables = {
     my_id = function() return select(2, sampGetPlayerIdByCharHandle(playerPed)) end,
     my_nick = function() return sampGetPlayerNickname(select(2, sampGetPlayerIdByCharHandle(playerPed))) end,
@@ -478,19 +515,21 @@ local simpleVariables = {
     compass = function() return getCompassDirection() end
 }
 
--- Вспомогательные функции для поиска
-function getClosestCarId()
-    local minDist = 9999
-    local closest = -1
-    local x, y, z = getCharCoordinates(playerPed)
-    for i = 0, 1800 do
-        local car = sampGetCarHandleBySampVehicleId(i)
-        if car then
-            local xi, yi, zi = getCarCoordinates(car)
-            local dist = math.sqrt((xi-x)^2 + (yi-y)^2 + (zi-z)^2)
-            if dist < minDist then
-                minDist = dist
-                closest = i
+    local minDistSq = math.huge
+        local carRaw, carHandle = sampGetCarHandleBySampVehicleId(i)
+        local car = carHandle and carRaw and carHandle or carRaw
+            local distSq = (xi-x)^2 + (yi-y)^2 + (zi-z)^2
+            if distSq < minDistSq then
+                minDistSq = distSq
+    local minDistSq = math.huge
+            local playerRaw, playerHandle = sampGetCharHandleBySampPlayerId(i)
+            local handle = playerHandle and playerRaw and playerHandle or playerRaw
+                    local distSq = (xi-x)^2 + (yi-y)^2 + (zi-z)^2
+                    if distSq < minDistSq then
+                        minDistSq = distSq
+                        local distSq = (xi-x)^2 + (yi-y)^2 + (zi-z)^2
+                        if distSq < minDistSq then
+                            minDistSq = distSq
             end
         end
     end
@@ -530,25 +569,25 @@ end
 
 function getCompassDirection()
     local angle = getCharHeading(playerPed)
-    if angle >= 337.5 or angle < 22.5 then return "С"
-    elseif angle < 67.5 then return "СВ"
-    elseif angle < 112.5 then return "В"
-    elseif angle < 157.5 then return "ЮВ"
-    elseif angle < 202.5 then return "Ю"
-    elseif angle < 247.5 then return "ЮЗ"
-    elseif angle < 292.5 then return "З"
-    elseif angle < 337.5 then return "СЗ"
+    if angle >= 337.5 or angle < 22.5 then return "Г‘"
+    elseif angle < 67.5 then return "Г‘Г‚"
+    elseif angle < 112.5 then return "Г‚"
+    elseif angle < 157.5 then return "ГћГ‚"
+    elseif angle < 202.5 then return "Гћ"
+    elseif angle < 247.5 then return "ГћГ‡"
+    elseif angle < 292.5 then return "Г‡"
+    elseif angle < 337.5 then return "Г‘Г‡"
     end
     return "?"
 end
 
--- ==================== ВЫПОЛНЕНИЕ БИНДА (С ТАЙМАУТОМ, КЭШЕМ И ОСТАНОВКОЙ) ====================
-local MAX_BIND_DURATION = 30000 -- 30 секунд
+-- ==================== Г‚Г›ГЏГЋГ‹ГЌГ…ГЌГ€Г… ГЃГ€ГЌГ„ГЂ (Г‘ Г’ГЂГ‰ГЊГЂГ“Г’ГЋГЊ, ГЉГќГГ…ГЊ Г€ ГЋГ‘Г’ГЂГЌГЋГ‚ГЉГЋГ‰) ====================
+local MAX_BIND_DURATION = 30000 -- 30 Г±ГҐГЄГіГ­Г¤
 
 function performBind(bind, args, targetId)
     if not bind or not bind.steps or #bind.steps == 0 then return end
     if activeBinder then
-        sampAddChatMessage("[Snatch Helper] Бинд уже выполняется", 0xFF0000)
+        sampAddChatMessage("[Snatch Helper] ГЃГЁГ­Г¤ ГіГ¦ГҐ ГўГ»ГЇГ®Г«Г­ГїГҐГІГ±Гї", 0xFF0000)
         return
     end
     activeBinder = true
@@ -570,9 +609,9 @@ function performBind(bind, args, targetId)
     end
 
     local function handleError(err)
-        sampAddChatMessage("[Snatch Helper] Ошибка: " .. tostring(err), 0xFF0000)
-        print("[Snatch Helper] Ошибка: " .. tostring(err))
-        -- Сбрасываем флаги при ошибке
+        sampAddChatMessage("[Snatch Helper] ГЋГёГЁГЎГЄГ : " .. tostring(err), 0xFF0000)
+        print("[Snatch Helper] ГЋГёГЁГЎГЄГ : " .. tostring(err))
+        -- Г‘ГЎГ°Г Г±Г»ГўГ ГҐГ¬ ГґГ«Г ГЈГЁ ГЇГ°ГЁ Г®ГёГЁГЎГЄГҐ
         activeBinder = false
         stopCurrentBind = false
     end
@@ -582,7 +621,7 @@ function performBind(bind, args, targetId)
             break
         end
         if os.clock() * 1000 - startTime > MAX_BIND_DURATION then
-            sampAddChatMessage("[Snatch Helper] Бинд прерван по таймауту", 0xFF0000)
+            sampAddChatMessage("[Snatch Helper] ГЃГЁГ­Г¤ ГЇГ°ГҐГ°ГўГ Г­ ГЇГ® ГІГ Г©Г¬Г ГіГІГі", 0xFF0000)
             break
         end
         local pause = step:match("^%[(%d+)%]$")
@@ -618,14 +657,15 @@ end
 function replaceVars(step, subs)
     local result = step
     for var, value in pairs(subs) do
-        result = result:gsub("{" .. var .. "}", value)
+        local escapedVar = var:gsub("([%(%)%.%%%+%-%*%?%[%]%^%$])", "%%%1")
+        result = result:gsub("{" .. escapedVar .. "}", tostring(value))
     end
     return result
 end
 
 function replaceFunctions(step, cache)
     local result = step
-    -- замена простых переменных {var}
+    -- Г§Г Г¬ГҐГ­Г  ГЇГ°Г®Г±ГІГ»Гµ ГЇГҐГ°ГҐГ¬ГҐГ­Г­Г»Гµ {var}
     for varName, func in pairs(simpleVariables) do
         local pattern = "{" .. varName .. "}"
         if result:find(pattern) then
@@ -639,7 +679,7 @@ function replaceFunctions(step, cache)
     end
     return result
 end
--- ==================== ПЕРЕХВАТ RPC (больше не нужен для команд) ====================
+-- ==================== ГЏГ…ГђГ…Г•Г‚ГЂГ’ RPC (ГЎГ®Г«ГјГёГҐ Г­ГҐ Г­ГіГ¦ГҐГ­ Г¤Г«Гї ГЄГ®Г¬Г Г­Г¤) ====================
 function onSendRpc(id, bs)
     if id == 50 then
         local len = raknetBitStreamReadInt8(bs)
@@ -653,7 +693,7 @@ function onSendRpc(id, bs)
 end
 addEventHandler("onSendRpc", onSendRpc)
 
--- ==================== СИСТЕМА СЕЛЕКТОРА (PIE MENU) ====================
+-- ==================== Г‘Г€Г‘Г’Г…ГЊГЂ Г‘Г…Г‹Г…ГЉГ’ГЋГђГЂ (PIE MENU) ====================
 local menuContext = {
     c_iMaxPieMenuStack = 8,
     c_iMaxPieItemCount = 12,
@@ -818,7 +858,7 @@ function EndPiePopup(ctx, title)
     imgui.PopStyleColor(2)
     imgui.PopStyleVar(2)
 end
--- ==================== СТИЛИ (с учётом темы) ====================
+-- ==================== Г‘Г’Г€Г‹Г€ (Г± ГіГ·ВёГІГ®Г¬ ГІГҐГ¬Г») ====================
 function setup_premium_style(themeName)
     local theme = colorThemes[themeName] or colorThemes.default
     local style = imgui.GetStyle()
@@ -886,7 +926,7 @@ function setup_premium_style(themeName)
     colors[imgui.Col.NavWindowingDimBg] = imgui.ImVec4(0.80, 0.80, 0.80, 0.20)
 end
 
--- ==================== ТАБЛИЦА ИМЁН КЛАВИШ ====================
+-- ==================== Г’ГЂГЃГ‹Г€Г–ГЂ Г€ГЊВЁГЌ ГЉГ‹ГЂГ‚Г€Г ====================
 local keyNames = {
     [0x01] = 'Left Mouse', [0x02] = 'Right Mouse', [0x04] = 'Middle Mouse',
     [0x08] = 'Backspace', [0x09] = 'Tab', [0x0D] = 'Enter', [0x10] = 'Shift',
@@ -908,15 +948,11 @@ local keyNames = {
 }
 
 function getKeyName(key, mod)
-    if key == 0 then return "Не назначена" end
-    local modText = ""
-    if mod == 1 then modText = "Ctrl+"
-    elseif mod == 2 then modText = "Shift+"
-    elseif mod == 3 then modText = "Alt+" end
+-- ====================    ====================
     return modText .. (keyNames[key] or "["..key.."]")
 end
 
--- ==================== ОКНО ВЫБОРА КЛАВИШИ ====================
+-- ==================== ГЋГЉГЌГЋ Г‚Г›ГЃГЋГђГЂ ГЉГ‹ГЂГ‚Г€ГГ€ ====================
 local keyBindPopupActive = false
 local tempKey = 0
 local tempMod = 0
@@ -927,15 +963,15 @@ imgui.OnFrame(
     function()
         imgui.SetNextWindowSize(imgui.ImVec2(300, 120), imgui.Cond.FirstUseEver)
         imgui.SetNextWindowPos(imgui.ImVec2(sizeX/2, sizeY/2), imgui.Cond.FirstUseEver, imgui.ImVec2(0.5, 0.5))
-        imgui.Begin(u8("Выбор горячей клавиши"), imgui.new.bool(true), imgui.WindowFlags.NoCollapse)
+        imgui.Begin(u8("Г‚Г»ГЎГ®Г° ГЈГ®Г°ГїГ·ГҐГ© ГЄГ«Г ГўГЁГёГЁ"), imgui.new.bool(true), imgui.WindowFlags.NoCollapse)
 
         if waitingForKey then
-            imgui.Text(u8("Нажмите любую комбинацию клавиш...\n(ESC для отмены)"))
-            -- Сначала проверяем ESC для отмены
+            imgui.Text(u8("ГЌГ Г¦Г¬ГЁГІГҐ Г«ГѕГЎГіГѕ ГЄГ®Г¬ГЎГЁГ­Г Г¶ГЁГѕ ГЄГ«Г ГўГЁГё...\n(ESC Г¤Г«Гї Г®ГІГ¬ГҐГ­Г»)"))
+            -- Г‘Г­Г Г·Г Г«Г  ГЇГ°Г®ГўГҐГ°ГїГҐГ¬ ESC Г¤Г«Гї Г®ГІГ¬ГҐГ­Г»
             if wasKeyPressed(0x1B) then
                 waitingForKey = false
             else
-                -- Список обычных клавиш (исключаем модификаторы Ctrl, Shift, Alt)
+                -- Г‘ГЇГЁГ±Г®ГЄ Г®ГЎГ»Г·Г­Г»Гµ ГЄГ«Г ГўГЁГё (ГЁГ±ГЄГ«ГѕГ·Г ГҐГ¬ Г¬Г®Г¤ГЁГґГЁГЄГ ГІГ®Г°Г» Ctrl, Shift, Alt)
                 local keys = {
                     0x01,0x02,0x04,0x08,0x09,0x0D,0x20,0x21,0x22,0x23,0x24,0x25,0x26,0x27,0x28,0x2D,0x2E,
                     0x30,0x31,0x32,0x33,0x34,0x35,0x36,0x37,0x38,0x39,0x41,0x42,0x43,0x44,0x45,0x46,0x47,
@@ -944,7 +980,7 @@ imgui.OnFrame(
                 }
                 for _, vkey in ipairs(keys) do
                     if wasKeyPressed(vkey) then
-                        -- определим модификаторы на момент нажатия (приоритет: Ctrl > Shift > Alt)
+                        -- Г®ГЇГ°ГҐГ¤ГҐГ«ГЁГ¬ Г¬Г®Г¤ГЁГґГЁГЄГ ГІГ®Г°Г» Г­Г  Г¬Г®Г¬ГҐГ­ГІ Г­Г Г¦Г ГІГЁГї (ГЇГ°ГЁГ®Г°ГЁГІГҐГІ: Ctrl > Shift > Alt)
                         local mod = 0
                         if isKeyDown(0x11) then mod = 1
                         elseif isKeyDown(0x10) then mod = 2
@@ -957,13 +993,13 @@ imgui.OnFrame(
                 end
             end
         else
-            imgui.Text(u8("Текущая комбинация: " .. getKeyName(tempKey, tempMod)))
+            imgui.Text(u8("Г’ГҐГЄГіГ№Г Гї ГЄГ®Г¬ГЎГЁГ­Г Г¶ГЁГї: " .. getKeyName(tempKey, tempMod)))
             imgui.Spacing()
-            if imgui.Button(u8("Изменить"), imgui.ImVec2(100,0)) then
+            if imgui.Button(u8("Г€Г§Г¬ГҐГ­ГЁГІГј"), imgui.ImVec2(100,0)) then
                 waitingForKey = true
             end
             imgui.SameLine()
-            if imgui.Button(u8("Сбросить"), imgui.ImVec2(100,0)) then
+            if imgui.Button(u8("Г‘ГЎГ°Г®Г±ГЁГІГј"), imgui.ImVec2(100,0)) then
                 tempKey = 0
                 tempMod = 0
             end
@@ -971,7 +1007,7 @@ imgui.OnFrame(
 
         imgui.Separator()
         if imgui.Button(u8("OK"), imgui.ImVec2(100,0)) then
-            -- сохраняем в зависимости от контекста
+            -- Г±Г®ГµГ°Г Г­ГїГҐГ¬ Гў Г§Г ГўГЁГ±ГЁГ¬Г®Г±ГІГЁ Г®ГІ ГЄГ®Г­ГІГҐГЄГ±ГІГ 
             if keyBindContext == "bind" then
                 editKeyBuf[0] = tempKey
                 editKeyModBuf[0] = tempMod
@@ -988,7 +1024,7 @@ imgui.OnFrame(
             keyBindContext = nil
         end
         imgui.SameLine()
-        if imgui.Button(u8("Отмена"), imgui.ImVec2(100,0)) then
+        if imgui.Button(u8("ГЋГІГ¬ГҐГ­Г "), imgui.ImVec2(100,0)) then
             keyBindPopupActive = false
             keyBindContext = nil
         end
@@ -997,7 +1033,7 @@ imgui.OnFrame(
     end
 )
 
--- ==================== ГЛАВНОЕ МЕНЮ ====================
+-- ==================== ГѓГ‹ГЂГ‚ГЌГЋГ… ГЊГ…ГЌГћ ====================
 local activeTab = new.int(0)
 local showMenu = {}
 local showEasterEgg = new.bool(false)
@@ -1020,23 +1056,23 @@ imgui.OnFrame(
         if mainWindow.alpha < 1 then flags = flags + imgui.WindowFlags.NoInputs end
         imgui.Begin(u8("Snatch Helper"), mainWindowOpen, flags)
 
-        -- синхронизация закрытия по крестику
+        -- Г±ГЁГ­ГµГ°Г®Г­ГЁГ§Г Г¶ГЁГї Г§Г ГЄГ°Г»ГІГЁГї ГЇГ® ГЄГ°ГҐГ±ГІГЁГЄГі
         if not mainWindowOpen[0] and mainWindow.state then
             mainWindow.switch2()
         end
 
         if imgui.BeginTabBar("MainTabs", 0) then
-            if imgui.BeginTabItem(u8("Справочник")) then
+            if imgui.BeginTabItem(u8("Г‘ГЇГ°Г ГўГ®Г·Г­ГЁГЄ")) then
                 activeTab[0] = 0
                 renderReferenceTab()
                 imgui.EndTabItem()
             end
-            if imgui.BeginTabItem(u8("Биндер")) then
+            if imgui.BeginTabItem(u8("ГЃГЁГ­Г¤ГҐГ°")) then
                 activeTab[0] = 1
                 renderBinderTab()
                 imgui.EndTabItem()
             end
-            if imgui.BeginTabItem(u8("Настройки")) then
+            if imgui.BeginTabItem(u8("ГЌГ Г±ГІГ°Г®Г©ГЄГЁ")) then
                 activeTab[0] = 2
                 renderSettingsTab()
                 imgui.EndTabItem()
@@ -1054,29 +1090,29 @@ imgui.OnFrame(
 )
 
 function renderReferenceTab()
-    createStyledHeader("Справочник процессуальных действий", "large")
+    createStyledHeader("Г‘ГЇГ°Г ГўГ®Г·Г­ГЁГЄ ГЇГ°Г®Г¶ГҐГ±Г±ГіГ Г«ГјГ­Г»Гµ Г¤ГҐГ©Г±ГІГўГЁГ©", "large")
     imgui.SameLine()
     imgui.SetCursorPosX(imgui.GetCursorPosX() + 10)
     imgui.TextColored(imgui.ImVec4(0.85, 0.65, 0.65, 1.00), u8("v5.2"))
     imgui.Spacing()
     createStyledSeparator()
     imgui.Spacing()
-    imgui.TextColored(imgui.ImVec4(0.70, 0.70, 0.70, 1.00), u8("Выберите раздел для изучения:"))
+    imgui.TextColored(imgui.ImVec4(0.70, 0.70, 0.70, 1.00), u8("Г‚Г»ГЎГҐГ°ГЁГІГҐ Г°Г Г§Г¤ГҐГ« Г¤Г«Гї ГЁГ§ГіГ·ГҐГ­ГЁГї:"))
     imgui.Spacing()
     imgui.Spacing()
     local menuButtons = {
-        {text = "Основания задержания"},
-        {text = "Порядок задержания"}, 
-        {text = "Основания ареста"},
-        {text = "Порядок ареста"},
-        {text = "Порядок ареста гос. сотрудника"},
-        {text = "Основания допроса"},
-        {text = "Порядок проведения допроса"},
-        {text = "Адвокат на допросе"},
-        {text = "Основания для обыска"},
-        {text = "Основания для рейдов"},
-        {text = "Основания правил безопасности"},
-        {text = "Пасхалка"}
+        {text = "ГЋГ±Г­Г®ГўГ Г­ГЁГї Г§Г Г¤ГҐГ°Г¦Г Г­ГЁГї"},
+        {text = "ГЏГ®Г°ГїГ¤Г®ГЄ Г§Г Г¤ГҐГ°Г¦Г Г­ГЁГї"}, 
+        {text = "ГЋГ±Г­Г®ГўГ Г­ГЁГї Г Г°ГҐГ±ГІГ "},
+        {text = "ГЏГ®Г°ГїГ¤Г®ГЄ Г Г°ГҐГ±ГІГ "},
+        {text = "ГЏГ®Г°ГїГ¤Г®ГЄ Г Г°ГҐГ±ГІГ  ГЈГ®Г±. Г±Г®ГІГ°ГіГ¤Г­ГЁГЄГ "},
+        {text = "ГЋГ±Г­Г®ГўГ Г­ГЁГї Г¤Г®ГЇГ°Г®Г±Г "},
+        {text = "ГЏГ®Г°ГїГ¤Г®ГЄ ГЇГ°Г®ГўГҐГ¤ГҐГ­ГЁГї Г¤Г®ГЇГ°Г®Г±Г "},
+        {text = "ГЂГ¤ГўГ®ГЄГ ГІ Г­Г  Г¤Г®ГЇГ°Г®Г±ГҐ"},
+        {text = "ГЋГ±Г­Г®ГўГ Г­ГЁГї Г¤Г«Гї Г®ГЎГ»Г±ГЄГ "},
+        {text = "ГЋГ±Г­Г®ГўГ Г­ГЁГї Г¤Г«Гї Г°ГҐГ©Г¤Г®Гў"},
+        {text = "ГЋГ±Г­Г®ГўГ Г­ГЁГї ГЇГ°Г ГўГЁГ« ГЎГҐГ§Г®ГЇГ Г±Г­Г®Г±ГІГЁ"},
+        {text = "ГЏГ Г±ГµГ Г«ГЄГ "}
     }
     for i, buttonData in ipairs(menuButtons) do
         local buttonText = buttonData.text
@@ -1093,10 +1129,10 @@ function renderReferenceTab()
     imgui.BeginChild("StatusBar", imgui.ImVec2(0, 40), false)
     imgui.PushStyleColor(imgui.Col.ChildBg, imgui.ImVec4(0.12, 0.12, 0.12, 0.9))
     imgui.SetCursorPosY(imgui.GetCursorPosY() + 10)
-    imgui.TextColored(imgui.ImVec4(0.85, 0.65, 0.65, 1.00), u8("Статус:"))
+    imgui.TextColored(imgui.ImVec4(0.85, 0.65, 0.65, 1.00), u8("Г‘ГІГ ГІГіГ±:"))
     imgui.SameLine()
     imgui.PushStyleColor(imgui.Col.Text, imgui.ImVec4(0.30, 0.95, 0.30, 1.00))
-    imgui.Text(u8("Активен"))
+    imgui.Text(u8("ГЂГЄГІГЁГўГҐГ­"))
     imgui.PopStyleColor()
     imgui.SameLine()
     imgui.SetCursorPosX(imgui.GetWindowWidth() - 120)
@@ -1106,23 +1142,23 @@ function renderReferenceTab()
 end
 
 function renderBinderTab()
-    -- Получаем доступное пространство внутри вкладки
+    -- ГЏГ®Г«ГіГ·Г ГҐГ¬ Г¤Г®Г±ГІГіГЇГ­Г®ГҐ ГЇГ°Г®Г±ГІГ°Г Г­Г±ГІГўГ® ГўГ­ГіГІГ°ГЁ ГўГЄГ«Г Г¤ГЄГЁ
     local avail = imgui.GetContentRegionAvail()
-    -- Левая панель: минимум 200 пикселей, иначе 30% от ширины
+    -- Г‹ГҐГўГ Гї ГЇГ Г­ГҐГ«Гј: Г¬ГЁГ­ГЁГ¬ГіГ¬ 200 ГЇГЁГЄГ±ГҐГ«ГҐГ©, ГЁГ­Г Г·ГҐ 30% Г®ГІ ГёГЁГ°ГЁГ­Г»
     local listWidth = math.max(avail.x * 0.3, 200)
-    -- Правая панель: остаток минус отступ между панелями
+    -- ГЏГ°Г ГўГ Гї ГЇГ Г­ГҐГ«Гј: Г®Г±ГІГ ГІГ®ГЄ Г¬ГЁГ­ГіГ± Г®ГІГ±ГІГіГЇ Г¬ГҐГ¦Г¤Гі ГЇГ Г­ГҐГ«ГїГ¬ГЁ
     local editorWidth = avail.x - listWidth - imgui.GetStyle().ItemSpacing.x
 
-    -- Левая панель (список)
+    -- Г‹ГҐГўГ Гї ГЇГ Г­ГҐГ«Гј (Г±ГЇГЁГ±Г®ГЄ)
     imgui.BeginChild("BindsListPanel", imgui.ImVec2(listWidth, -1), true)
     
 
     
-    imgui.Text(u8("Поиск:"))
+    imgui.Text(u8("ГЏГ®ГЁГ±ГЄ:"))
     imgui.InputText("##search", searchBuf, 64)
     imgui.Separator()
     imgui.Spacing()
-    if createStyledButton("+ Новый", -1, 30, true) then
+    if createStyledButton("+ ГЌГ®ГўГ»Г©", -1, 30, true) then
         selectedBindIndex = nil
         ffi.copy(editNameBuf, "")
         ffi.copy(editCmdBuf, "")
@@ -1144,9 +1180,9 @@ function renderBinderTab()
     end
     
     if #filteredIndices == 0 then
-        imgui.TextColored(imgui.ImVec4(0.70, 0.70, 0.70, 1.00), u8("Нет биндов"))
+        imgui.TextColored(imgui.ImVec4(0.70, 0.70, 0.70, 1.00), u8("ГЌГҐГІ ГЎГЁГ­Г¤Г®Гў"))
     else
-        -- Внутренний child для прокрутки списка
+        -- Г‚Г­ГіГІГ°ГҐГ­Г­ГЁГ© child Г¤Г«Гї ГЇГ°Г®ГЄГ°ГіГІГЄГЁ Г±ГЇГЁГ±ГЄГ 
         imgui.BeginChild("ScrollingBinds", imgui.ImVec2(0, 0), false)
         for _, idx in ipairs(filteredIndices) do
             local bind = binds[idx]
@@ -1156,7 +1192,7 @@ function renderBinderTab()
             else
                 imgui.PushStyleColor(imgui.Col.Button, imgui.ImVec4(0.2, 0.2, 0.2, 0.6))
             end
-            if imgui.Button(bind.name or "Без названия", imgui.ImVec2(-1, 30)) then
+            if imgui.Button(bind.name or "ГЃГҐГ§ Г­Г Г§ГўГ Г­ГЁГї", imgui.ImVec2(-1, 30)) then
                 selectedBindIndex = idx
                 ffi.copy(editNameBuf, bind.name or "")
                 if bind.cmd and bind.cmd ~= "" then
@@ -1172,10 +1208,10 @@ function renderBinderTab()
             imgui.PopStyleColor()
             if imgui.IsItemHovered() then
                 imgui.BeginTooltip()
-                imgui.Text(u8("Команда: " .. (bind.cmd and "/"..bind.cmd or "нет")))
-                imgui.Text(u8("Шагов: " .. #(bind.steps or {})))
+                imgui.Text(u8("ГЉГ®Г¬Г Г­Г¤Г : " .. (bind.cmd and "/"..bind.cmd or "Г­ГҐГІ")))
+                imgui.Text(u8("ГГ ГЈГ®Гў: " .. #(bind.steps or {})))
                 if bind.key and bind.key ~= 0 then
-                    imgui.Text(u8("Клавиша: " .. getKeyName(bind.key, bind.key_mod)))
+                    imgui.Text(u8("ГЉГ«Г ГўГЁГёГ : " .. getKeyName(bind.key, bind.key_mod)))
                 end
                 imgui.EndTooltip()
             end
@@ -1183,28 +1219,28 @@ function renderBinderTab()
         imgui.EndChild()
     end
     
-    imgui.EndChild() -- закрываем левую панель
+    imgui.EndChild() -- Г§Г ГЄГ°Г»ГўГ ГҐГ¬ Г«ГҐГўГіГѕ ГЇГ Г­ГҐГ«Гј
 
-    -- Размещаем следующую панель рядом
+    -- ГђГ Г§Г¬ГҐГ№Г ГҐГ¬ Г±Г«ГҐГ¤ГіГѕГ№ГіГѕ ГЇГ Г­ГҐГ«Гј Г°ГїГ¤Г®Г¬
     imgui.SameLine()
 
-    -- Правая панель (редактор)
+    -- ГЏГ°Г ГўГ Гї ГЇГ Г­ГҐГ«Гј (Г°ГҐГ¤Г ГЄГІГ®Г°)
     imgui.BeginChild("BindEditorPanel", imgui.ImVec2(editorWidth, -1), true)
     
     if selectedBindIndex then
-        imgui.Text(u8("Редактирование бинда"))
+        imgui.Text(u8("ГђГҐГ¤Г ГЄГІГЁГ°Г®ГўГ Г­ГЁГҐ ГЎГЁГ­Г¤Г "))
     else
-        imgui.Text(u8("Создание нового бинда"))
+        imgui.Text(u8("Г‘Г®Г§Г¤Г Г­ГЁГҐ Г­Г®ГўГ®ГЈГ® ГЎГЁГ­Г¤Г "))
     end
     imgui.Separator()
     imgui.Spacing()
-    imgui.Text(u8("Название:"))
+    imgui.Text(u8("ГЌГ Г§ГўГ Г­ГЁГҐ:"))
     imgui.InputText("##editname", editNameBuf, 256)
     imgui.Spacing()
-    imgui.Text(u8("Команда (с /):"))
+    imgui.Text(u8("ГЉГ®Г¬Г Г­Г¤Г  (Г± /):"))
     imgui.InputText("##editcmd", editCmdBuf, 64)
     imgui.Spacing()
-    imgui.Text(u8("Горячая клавиша:"))
+    imgui.Text(u8("ГѓГ®Г°ГїГ·Г Гї ГЄГ«Г ГўГЁГёГ :"))
     local keyLabel = getKeyName(editKeyBuf[0], editKeyModBuf[0])
     if imgui.Button(u8(keyLabel), imgui.ImVec2(200, 0)) then
         tempKey = editKeyBuf[0]
@@ -1214,15 +1250,15 @@ function renderBinderTab()
         keyBindPopupActive = true
     end
     imgui.Spacing()
-    imgui.Text(u8("Задержка между шагами (мс):"))
+    imgui.Text(u8("Г‡Г Г¤ГҐГ°Г¦ГЄГ  Г¬ГҐГ¦Г¤Гі ГёГ ГЈГ Г¬ГЁ (Г¬Г±):"))
     imgui.InputInt("##editdelay", editDelayBuf, 100, 500)
     if editDelayBuf[0] < 100 then editDelayBuf[0] = 100 end
     imgui.Spacing()
-    imgui.Text(u8("Шаги (каждая строка - отдельное действие):"))
-    imgui.TextWrapped(u8("Используйте {имя} для подстановки аргументов, [число] для паузы."))
+    imgui.Text(u8("ГГ ГЈГЁ (ГЄГ Г¦Г¤Г Гї Г±ГІГ°Г®ГЄГ  - Г®ГІГ¤ГҐГ«ГјГ­Г®ГҐ Г¤ГҐГ©Г±ГІГўГЁГҐ):"))
+    imgui.TextWrapped(u8("Г€Г±ГЇГ®Г«ГјГ§ГіГ©ГІГҐ {ГЁГ¬Гї} Г¤Г«Гї ГЇГ®Г¤Г±ГІГ Г­Г®ГўГЄГЁ Г Г°ГЈГіГ¬ГҐГ­ГІГ®Гў, [Г·ГЁГ±Г«Г®] Г¤Г«Гї ГЇГ ГіГ§Г»."))
     imgui.InputTextMultiline("##editsteps", editStepsBuf, 4096, imgui.ImVec2(-1, 200), imgui.InputTextFlags.None)
     imgui.Spacing()
-    if createStyledButton("Сохранить", 100, 32, true) then
+    if createStyledButton("Г‘Г®ГµГ°Г Г­ГЁГІГј", 100, 32, true) then
         local name = ffi.string(editNameBuf):gsub("^%s*(.-)%s*$", "%1")
         local cmdRaw = ffi.string(editCmdBuf):gsub("^%s*(.-)%s*$", "%1")
         local cmd = cmdRaw:match("^/(%S+)") or cmdRaw:match("^(%S+)") or ""
@@ -1245,13 +1281,13 @@ function renderBinderTab()
                 selectedBindIndex = #binds
             end
             saveBinds()
-            sampAddChatMessage("[Snatch Helper] Бинд сохранен", 0x00FF00)
+            sampAddChatMessage("[Snatch Helper] ГЃГЁГ­Г¤ Г±Г®ГµГ°Г Г­ГҐГ­", 0x00FF00)
         else
-            sampAddChatMessage("[Snatch Helper] Заполните название и шаги!", 0xFF0000)
+            sampAddChatMessage("[Snatch Helper] Г‡Г ГЇГ®Г«Г­ГЁГІГҐ Г­Г Г§ГўГ Г­ГЁГҐ ГЁ ГёГ ГЈГЁ!", 0xFF0000)
         end
     end
     imgui.SameLine()
-    if createStyledButton("Выполнить", 100, 32) then
+    if createStyledButton("Г‚Г»ГЇГ®Г«Г­ГЁГІГј", 100, 32) then
         local stepsText = ffi.string(editStepsBuf)
         if stepsText ~= "" then
             local testBind = {
@@ -1266,19 +1302,19 @@ function renderBinderTab()
         end
     end
     imgui.SameLine()
-    if selectedBindIndex and createStyledButton("Удалить", 100, 32) then
+    if selectedBindIndex and createStyledButton("Г“Г¤Г Г«ГЁГІГј", 100, 32) then
         deleteConfirmation.active = true
         deleteConfirmation.index = selectedBindIndex
     end
 
-    -- Окно подтверждения удаления
+    -- ГЋГЄГ­Г® ГЇГ®Г¤ГІГўГҐГ°Г¦Г¤ГҐГ­ГЁГї ГіГ¤Г Г«ГҐГ­ГЁГї
     if deleteConfirmation.active then
-        imgui.OpenPopup(u8("Подтверждение удаления"))
+        imgui.OpenPopup(u8("ГЏГ®Г¤ГІГўГҐГ°Г¦Г¤ГҐГ­ГЁГҐ ГіГ¤Г Г«ГҐГ­ГЁГї"))
     end
-    if imgui.BeginPopupModal(u8("Подтверждение удаления"), nil, imgui.WindowFlags.AlwaysAutoResize) then
-        imgui.Text(u8("Вы уверены, что хотите удалить этот бинд?"))
+    if imgui.BeginPopupModal(u8("ГЏГ®Г¤ГІГўГҐГ°Г¦Г¤ГҐГ­ГЁГҐ ГіГ¤Г Г«ГҐГ­ГЁГї"), nil, imgui.WindowFlags.AlwaysAutoResize) then
+        imgui.Text(u8("Г‚Г» ГіГўГҐГ°ГҐГ­Г», Г·ГІГ® ГµГ®ГІГЁГІГҐ ГіГ¤Г Г«ГЁГІГј ГЅГІГ®ГІ ГЎГЁГ­Г¤?"))
         imgui.Separator()
-        if imgui.Button(u8("Да"), imgui.ImVec2(80,0)) then
+        if imgui.Button(u8("Г„Г "), imgui.ImVec2(80,0)) then
             if deleteConfirmation.index then
                 table.remove(binds, deleteConfirmation.index)
                 if selectedBindIndex == deleteConfirmation.index then
@@ -1291,31 +1327,31 @@ function renderBinderTab()
                     editKeyModBuf[0] = 0
                 end
                 saveBinds()
-                sampAddChatMessage("[Snatch Helper] Бинд удален", 0x00FF00)
+                sampAddChatMessage("[Snatch Helper] ГЃГЁГ­Г¤ ГіГ¤Г Г«ГҐГ­", 0x00FF00)
             end
             deleteConfirmation.active = false
             imgui.CloseCurrentPopup()
         end
         imgui.SameLine()
-        if imgui.Button(u8("Нет"), imgui.ImVec2(80,0)) then
+        if imgui.Button(u8("ГЌГҐГІ"), imgui.ImVec2(80,0)) then
             deleteConfirmation.active = false
             imgui.CloseCurrentPopup()
         end
         imgui.EndPopup()
     end
 
-    imgui.EndChild() -- закрываем правую панель
+    imgui.EndChild() -- Г§Г ГЄГ°Г»ГўГ ГҐГ¬ ГЇГ°Г ГўГіГѕ ГЇГ Г­ГҐГ«Гј
 end
 
 function renderSettingsTab()
-    createStyledHeader("Настройки интерфейса", "large")
+    createStyledHeader("ГЌГ Г±ГІГ°Г®Г©ГЄГЁ ГЁГ­ГІГҐГ°ГґГҐГ©Г±Г ", "large")
     imgui.Spacing()
     createStyledSeparator()
     imgui.Spacing()
     local changed = false
 
-    -- Задержка по умолчанию
-    imgui.Text(u8("Задержка по умолчанию для новых биндов (мс):"))
+    -- Г‡Г Г¤ГҐГ°Г¦ГЄГ  ГЇГ® ГіГ¬Г®Г«Г·Г Г­ГЁГѕ
+    imgui.Text(u8("Г‡Г Г¤ГҐГ°Г¦ГЄГ  ГЇГ® ГіГ¬Г®Г«Г·Г Г­ГЁГѕ Г¤Г«Гї Г­Г®ГўГ»Гµ ГЎГЁГ­Г¤Г®Гў (Г¬Г±):"))
     local defaultDelayVal = imgui.new.int(settings.defaultDelay)
     if imgui.InputInt("##defaultDelay", defaultDelayVal, 100, 500) then
         settings.defaultDelay = defaultDelayVal[0]
@@ -1324,15 +1360,15 @@ function renderSettingsTab()
     end
     imgui.Spacing()
 
-    -- Цветовая тема
-    imgui.Text(u8("Цветовая тема:"))
+    -- Г–ГўГҐГІГ®ГўГ Гї ГІГҐГ¬Г 
+    imgui.Text(u8("Г–ГўГҐГІГ®ГўГ Гї ГІГҐГ¬Г :"))
     local themeIndex = imgui.new.int(0)
     if settings.currentTheme == "dark" then themeIndex[0] = 1
     elseif settings.currentTheme == "light" then themeIndex[0] = 2
     elseif settings.currentTheme == "green" then themeIndex[0] = 3
     elseif settings.currentTheme == "blue" then themeIndex[0] = 4
     else themeIndex[0] = 0 end
-    local themeNames = {u8"По умолчанию", u8"Тёмная", u8"Светлая", u8"Зелёная", u8"Синяя"}
+    local themeNames = {u8"ГЏГ® ГіГ¬Г®Г«Г·Г Г­ГЁГѕ", u8"Г’ВёГ¬Г­Г Гї", u8"Г‘ГўГҐГІГ«Г Гї", u8"Г‡ГҐГ«ВёГ­Г Гї", u8"Г‘ГЁГ­ГїГї"}
     local themeItems = ffi.new("const char*[?]", #themeNames)
     for i = 1, #themeNames do
         themeItems[i-1] = themeNames[i]
@@ -1348,8 +1384,8 @@ function renderSettingsTab()
     end
     imgui.Spacing()
 
-    -- Клавиша остановки бинда
-    imgui.Text(u8("Клавиша остановки бинда (по умолчанию F12):"))
+    -- ГЉГ«Г ГўГЁГёГ  Г®Г±ГІГ Г­Г®ГўГЄГЁ ГЎГЁГ­Г¤Г 
+    imgui.Text(u8("ГЉГ«Г ГўГЁГёГ  Г®Г±ГІГ Г­Г®ГўГЄГЁ ГЎГЁГ­Г¤Г  (ГЇГ® ГіГ¬Г®Г«Г·Г Г­ГЁГѕ F12):"))
     local stopKeyLabel = getKeyName(settings.stopKey, settings.stopKeyMod)
     if imgui.Button(u8(stopKeyLabel), imgui.ImVec2(200, 0)) then
         tempKey = settings.stopKey
@@ -1360,8 +1396,8 @@ function renderSettingsTab()
     end
     imgui.Spacing()
 
-    -- Клавиша селектора игрока
-    imgui.Text(u8("Клавиша селектора игрока (по умолчанию Alt):"))
+    -- ГЉГ«Г ГўГЁГёГ  Г±ГҐГ«ГҐГЄГІГ®Г°Г  ГЁГЈГ°Г®ГЄГ 
+    imgui.Text(u8("ГЉГ«Г ГўГЁГёГ  Г±ГҐГ«ГҐГЄГІГ®Г°Г  ГЁГЈГ°Г®ГЄГ  (ГЇГ® ГіГ¬Г®Г«Г·Г Г­ГЁГѕ Alt):"))
     local selKeyLabel = getKeyName(settings.selectorKey, settings.selectorKeyMod)
     if imgui.Button(u8(selKeyLabel), imgui.ImVec2(200, 0)) then
         tempKey = settings.selectorKey
@@ -1376,19 +1412,19 @@ function renderSettingsTab()
 end
 
 
--- Окна справочника (прежние)
+-- ГЋГЄГ­Г  Г±ГЇГ°Г ГўГ®Г·Г­ГЁГЄГ  (ГЇГ°ГҐГ¦Г­ГЁГҐ)
 local menuData = {
-    [1] = { title = "Основания задержания", content = [[Как называть: Задержаны на основании пункта X, статьи 1, раздела 2, части 1 Процессуального Кодекса.\nЛибо словами, пример: Задержаны в связи с нарушением устава МЮ.\n\nA. Совершение гражданином дорожного или уголовного проступка\nB. Нахождение гражданина в маске, скрывающей лицо\nC. Гражданин ведёт себя подозрительно, вызывающе, агрессивно\nD. Имеется предположение, что лицо находится под алкоголем или наркотиками\nE. Проведение проверки документов гражданина\nF. Гражданин пересекает организованные блокпосты\nG. Гражданин находится поблизости от места преступления и мог быть свидетелем\nH. Нарушение устава или ФП от госника\nI. В период введения военного положения]] },
-    [2] = { title = "Порядок задержания", content = [[1) Идентифицировать себя, показать ксиву по требованию\n2) Провести необходимые действия в зависимости от ситуации:\n   - Затребовать документы\n   - Провести опрос\n   - Обыск при наличии оснований\n   - Потребовать покинуть ТС\n   - Потребовать переместиться\n   - Надеть наручники, но после снять\n   - Провести арест при наличии оснований]] },
-    [3] = { title = "Основания ареста", content = [[Арестованы на основании пункта X, статьи 3, раздела 2, части 1 Процессуального Кодекса.\n\nA. Лицо застигнуто на месте совершения дорожного или уголовного преступления\nB. В случае если преступник скрылся - его можно арестовать в течении 12 часов без КФ\nC. Лицо находится в федеральном розыске\nD. На арестовываемого имеется действующий ордер на арест\nE. Проведение проверки документов гражданина\nF. Игнорирование в течении 24 часов требования о явке на допрос\nG. Транспортировка на допрос]] },
-    [4] = { title = "Порядок ареста", content = [[1) Надеть наручники\n2) Идентифицировать себя и показать ксиву при запросе, если этого не сделали раньше\n3) Сообщить основания для ареста. ВАЖНО: При аресте по УК/ДК - назвать статью (номер или название)\n4) Узнать в рамках РП личность арестованного, если не узнали ранее.\n5) Обыск\n6) Миранда\n7) Выдача розыска, если не выдали ранее\n8) Транспортировка в КПЗ или допросную\n9) Посадка в КПЗ при необходимости\n\nИСКЛЮЧЕНИЕ: В случае опасности, можно сначала перевести и только потом начать с пункта 2.\nИСКЛЮЧЕНИЕ: Миранду и розыск можно выдать во время транспортировки.\nИСКЛЮЧЕНИЕ: Миранду можно зачитать до установления личности.]] },
-    [5] = { title = "Порядок ареста гос. сотрудника", content = [[1) По усмотрению выдать розыск с причиной 'СЛЕДСТВИЕ'\n2) Если арестованного передали копы - получение от них доказательств\n3) Миранда\n4) Обыск\n5) Везёте на допрос по своему усмотрению\n6) По окончанию процессуальных действий выбираете меру наказания\n7) Если применён арест в КПЗ, в течении 24 часов составляете КФ на форум]] },
-    [6] = { title = "Основания допроса", content = [[Допрос проводится на основании пункта X, статьи 1, раздела 2, части 2 ПК.\n\nA. Допрос арестованного лица\nB. Ордер на проведение допроса\nC. Наличие оснований полагать, что у лица есть информация\nD. На лицо открыт КФ. По запросу предоставить материалы и опубликовать КФ на форуме в течении 24 часов\nE. Повестка на допрос, опубликованная на форуме]] },
-    [7] = { title = "Порядок проведения допроса", content = [[1) Усадить человека на стул, одну руку приковать к столу, вторую оставить свободной\n2) Включить камеру в допросной\n3) Назвать дату и время начала допроса. Пример: Допрос проводится 15 июля 2025 в 16:30\n4) Сообщить кто проводит допрос и назвать позывной. Пример: Допрос проводит агент Слоняра\n5) Указать кто допрашивается и в каком статусе (свидетель/подозреваемый/потерпевший). Пример: Допрашивает Том Круз как свидетель.\n6) Миранда\n7) Уточняем желает-ли допрашиваемый реализовать свои права. Если требует адвоката - /advokatdopros\n8) Если допрашиваем госника - по своему желанию можно уведомить его организацию. Лидер и зам имеют право присутствовать на допросе.\n9) Уведомляем адвоката, допрашиваемого и его лидера/зама об ответственности за разглашение гос.тайны\nОт адвоката и лидера/зама обязательно требуем подписать уведомление, при отказе - выгоняем с допросной.\n11) Задаём вопросы, которые считаем нужным\n12) В конце допроса оповещаем о завершении допроса и выключаем камеру.\n13) Выводим допрашиваемого, его лидера/зама и адвоката с мешком на голове из офиса. При необходимости отвозим в КПЗ.]] },
-    [8] = { title = "Адвокат на допросе", content = [[При поступлении требования - запрашиваем адвоката в /d у правительства. Если в течении 5 минут...\n...с момента ПЕРВОГО запроса ответа не последовало - продолжаем без адвоката. Аналогично делаем при отрицательном ответе.\nЕсли адвокат вышел на связь - ждём пока он приедет в течении 10 минут. По истечении этого времени - продолжаем без адвоката.\nПри прибытии адвоката проверяем у него паспорт, наличие лицензии и 5+ ранга в правительстве.\nПеред заводом в офис обыскиваем и отбираем у адвоката телефон, камеру, диктофон и т.п., надеваем мешок.\nЕсли у адвоката нашли запрещёнку - арестовываем адвоката.\nАдвокат имеет право на приватные беседы. Общая их продолжительность - 20 минут.]] },
-    [9] = { title = "Основания для обыска", content = [[Обыск на основании пункта X, статьи 1, раздела 3, части 1 ПК\n\nA. Ордер\nB. Арест\nC. Проведение рейда\nD. Контроль на блокпостах\nE. Вход в зону оцепления\nF. Вход на территорию режимного объекта\nG. Добровольное согласие на обыск\nH. Задержание в связи с ношением гражданином маски\nI. Задержание госника в связи с нарушением устава или ФП\nK. Задержание в случае, если есть основания предполагать, что задержанный совершил преступление\nL. Задержание в случае, если задержанный употребил нарко или алкоголь на глазах агента\nM. Проведение проверки гос организации\n\nВАЖНО: Обыск делается В ПЕРЧАТКАХ!]] },
-    [10] = { title = "Основания для рейдов", content = [[Рейд ГЕТТО - Статья 2, раздел 5, части 2 ПК. [Нужен ордер]\nРейд ПРИТОНА - Статья 3, раздел 5, части 2 ПК\nРейд ОПГ - Статья 4, раздел 5, части 2 ПК [Нужен ордер]\nРейд СТО - Статья 5, раздел 5, части 2 ПК\nРейд ГРУЗОПЕРЕВОЗОК - Статья 6, раздел 5, части 2 ПК [Нужен ордер]\nРейд ПАТРУЛЕЙ - Статья 7, раздел 5, части 2 ПК\nРейд ЛАВОК ЦР/ЦГ - Статья 8, раздел 5, части 2 ПК\nРейд ГОС.ОРГ - Статья 9, раздел 5, части 2 ПК [Нужен ордер]\nРейд НАРКОТРАФИКА - Статья 10, раздел 5, части 2 ПК]] },
-    [11] = { title = "Основания правил безопасности", content = [[6 метров - статья 1, раздел 5, части 1 ПК\n3 поворота - статья 1, раздел 5, части 1 ПК]] }
+    [1] = { title = "ГЋГ±Г­Г®ГўГ Г­ГЁГї Г§Г Г¤ГҐГ°Г¦Г Г­ГЁГї", content = [[ГЉГ ГЄ Г­Г Г§Г»ГўГ ГІГј: Г‡Г Г¤ГҐГ°Г¦Г Г­Г» Г­Г  Г®Г±Г­Г®ГўГ Г­ГЁГЁ ГЇГіГ­ГЄГІГ  X, Г±ГІГ ГІГјГЁ 1, Г°Г Г§Г¤ГҐГ«Г  2, Г·Г Г±ГІГЁ 1 ГЏГ°Г®Г¶ГҐГ±Г±ГіГ Г«ГјГ­Г®ГЈГ® ГЉГ®Г¤ГҐГЄГ±Г .\nГ‹ГЁГЎГ® Г±Г«Г®ГўГ Г¬ГЁ, ГЇГ°ГЁГ¬ГҐГ°: Г‡Г Г¤ГҐГ°Г¦Г Г­Г» Гў Г±ГўГїГ§ГЁ Г± Г­Г Г°ГіГёГҐГ­ГЁГҐГ¬ ГіГ±ГІГ ГўГ  ГЊГћ.\n\nA. Г‘Г®ГўГҐГ°ГёГҐГ­ГЁГҐ ГЈГ°Г Г¦Г¤Г Г­ГЁГ­Г®Г¬ Г¤Г®Г°Г®Г¦Г­Г®ГЈГ® ГЁГ«ГЁ ГіГЈГ®Г«Г®ГўГ­Г®ГЈГ® ГЇГ°Г®Г±ГІГіГЇГЄГ \nB. ГЌГ ГµГ®Г¦Г¤ГҐГ­ГЁГҐ ГЈГ°Г Г¦Г¤Г Г­ГЁГ­Г  Гў Г¬Г Г±ГЄГҐ, Г±ГЄГ°Г»ГўГ ГѕГ№ГҐГ© Г«ГЁГ¶Г®\nC. ГѓГ°Г Г¦Г¤Г Г­ГЁГ­ ГўГҐГ¤ВёГІ Г±ГҐГЎГї ГЇГ®Г¤Г®Г§Г°ГЁГІГҐГ«ГјГ­Г®, ГўГ»Г§Г»ГўГ ГѕГ№ГҐ, Г ГЈГ°ГҐГ±Г±ГЁГўГ­Г®\nD. Г€Г¬ГҐГҐГІГ±Гї ГЇГ°ГҐГ¤ГЇГ®Г«Г®Г¦ГҐГ­ГЁГҐ, Г·ГІГ® Г«ГЁГ¶Г® Г­Г ГµГ®Г¤ГЁГІГ±Гї ГЇГ®Г¤ Г Г«ГЄГ®ГЈГ®Г«ГҐГ¬ ГЁГ«ГЁ Г­Г Г°ГЄГ®ГІГЁГЄГ Г¬ГЁ\nE. ГЏГ°Г®ГўГҐГ¤ГҐГ­ГЁГҐ ГЇГ°Г®ГўГҐГ°ГЄГЁ Г¤Г®ГЄГіГ¬ГҐГ­ГІГ®Гў ГЈГ°Г Г¦Г¤Г Г­ГЁГ­Г \nF. ГѓГ°Г Г¦Г¤Г Г­ГЁГ­ ГЇГҐГ°ГҐГ±ГҐГЄГ ГҐГІ Г®Г°ГЈГ Г­ГЁГ§Г®ГўГ Г­Г­Г»ГҐ ГЎГ«Г®ГЄГЇГ®Г±ГІГ»\nG. ГѓГ°Г Г¦Г¤Г Г­ГЁГ­ Г­Г ГµГ®Г¤ГЁГІГ±Гї ГЇГ®ГЎГ«ГЁГ§Г®Г±ГІГЁ Г®ГІ Г¬ГҐГ±ГІГ  ГЇГ°ГҐГ±ГІГіГЇГ«ГҐГ­ГЁГї ГЁ Г¬Г®ГЈ ГЎГ»ГІГј Г±ГўГЁГ¤ГҐГІГҐГ«ГҐГ¬\nH. ГЌГ Г°ГіГёГҐГ­ГЁГҐ ГіГ±ГІГ ГўГ  ГЁГ«ГЁ Г”ГЏ Г®ГІ ГЈГ®Г±Г­ГЁГЄГ \nI. Г‚ ГЇГҐГ°ГЁГ®Г¤ ГўГўГҐГ¤ГҐГ­ГЁГї ГўГ®ГҐГ­Г­Г®ГЈГ® ГЇГ®Г«Г®Г¦ГҐГ­ГЁГї]] },
+    [2] = { title = "ГЏГ®Г°ГїГ¤Г®ГЄ Г§Г Г¤ГҐГ°Г¦Г Г­ГЁГї", content = [[1) Г€Г¤ГҐГ­ГІГЁГґГЁГ¶ГЁГ°Г®ГўГ ГІГј Г±ГҐГЎГї, ГЇГ®ГЄГ Г§Г ГІГј ГЄГ±ГЁГўГі ГЇГ® ГІГ°ГҐГЎГ®ГўГ Г­ГЁГѕ\n2) ГЏГ°Г®ГўГҐГ±ГІГЁ Г­ГҐГ®ГЎГµГ®Г¤ГЁГ¬Г»ГҐ Г¤ГҐГ©Г±ГІГўГЁГї Гў Г§Г ГўГЁГ±ГЁГ¬Г®Г±ГІГЁ Г®ГІ Г±ГЁГІГіГ Г¶ГЁГЁ:\n   - Г‡Г ГІГ°ГҐГЎГ®ГўГ ГІГј Г¤Г®ГЄГіГ¬ГҐГ­ГІГ»\n   - ГЏГ°Г®ГўГҐГ±ГІГЁ Г®ГЇГ°Г®Г±\n   - ГЋГЎГ»Г±ГЄ ГЇГ°ГЁ Г­Г Г«ГЁГ·ГЁГЁ Г®Г±Г­Г®ГўГ Г­ГЁГ©\n   - ГЏГ®ГІГ°ГҐГЎГ®ГўГ ГІГј ГЇГ®ГЄГЁГ­ГіГІГј Г’Г‘\n   - ГЏГ®ГІГ°ГҐГЎГ®ГўГ ГІГј ГЇГҐГ°ГҐГ¬ГҐГ±ГІГЁГІГјГ±Гї\n   - ГЌГ Г¤ГҐГІГј Г­Г Г°ГіГ·Г­ГЁГЄГЁ, Г­Г® ГЇГ®Г±Г«ГҐ Г±Г­ГїГІГј\n   - ГЏГ°Г®ГўГҐГ±ГІГЁ Г Г°ГҐГ±ГІ ГЇГ°ГЁ Г­Г Г«ГЁГ·ГЁГЁ Г®Г±Г­Г®ГўГ Г­ГЁГ©]] },
+    [3] = { title = "ГЋГ±Г­Г®ГўГ Г­ГЁГї Г Г°ГҐГ±ГІГ ", content = [[ГЂГ°ГҐГ±ГІГ®ГўГ Г­Г» Г­Г  Г®Г±Г­Г®ГўГ Г­ГЁГЁ ГЇГіГ­ГЄГІГ  X, Г±ГІГ ГІГјГЁ 3, Г°Г Г§Г¤ГҐГ«Г  2, Г·Г Г±ГІГЁ 1 ГЏГ°Г®Г¶ГҐГ±Г±ГіГ Г«ГјГ­Г®ГЈГ® ГЉГ®Г¤ГҐГЄГ±Г .\n\nA. Г‹ГЁГ¶Г® Г§Г Г±ГІГЁГЈГ­ГіГІГ® Г­Г  Г¬ГҐГ±ГІГҐ Г±Г®ГўГҐГ°ГёГҐГ­ГЁГї Г¤Г®Г°Г®Г¦Г­Г®ГЈГ® ГЁГ«ГЁ ГіГЈГ®Г«Г®ГўГ­Г®ГЈГ® ГЇГ°ГҐГ±ГІГіГЇГ«ГҐГ­ГЁГї\nB. Г‚ Г±Г«ГіГ·Г ГҐ ГҐГ±Г«ГЁ ГЇГ°ГҐГ±ГІГіГЇГ­ГЁГЄ Г±ГЄГ°Г»Г«Г±Гї - ГҐГЈГ® Г¬Г®Г¦Г­Г® Г Г°ГҐГ±ГІГ®ГўГ ГІГј Гў ГІГҐГ·ГҐГ­ГЁГЁ 12 Г·Г Г±Г®Гў ГЎГҐГ§ ГЉГ”\nC. Г‹ГЁГ¶Г® Г­Г ГµГ®Г¤ГЁГІГ±Гї Гў ГґГҐГ¤ГҐГ°Г Г«ГјГ­Г®Г¬ Г°Г®Г§Г»Г±ГЄГҐ\nD. ГЌГ  Г Г°ГҐГ±ГІГ®ГўГ»ГўГ ГҐГ¬Г®ГЈГ® ГЁГ¬ГҐГҐГІГ±Гї Г¤ГҐГ©Г±ГІГўГіГѕГ№ГЁГ© Г®Г°Г¤ГҐГ° Г­Г  Г Г°ГҐГ±ГІ\nE. ГЏГ°Г®ГўГҐГ¤ГҐГ­ГЁГҐ ГЇГ°Г®ГўГҐГ°ГЄГЁ Г¤Г®ГЄГіГ¬ГҐГ­ГІГ®Гў ГЈГ°Г Г¦Г¤Г Г­ГЁГ­Г \nF. Г€ГЈГ­Г®Г°ГЁГ°Г®ГўГ Г­ГЁГҐ Гў ГІГҐГ·ГҐГ­ГЁГЁ 24 Г·Г Г±Г®Гў ГІГ°ГҐГЎГ®ГўГ Г­ГЁГї Г® ГїГўГЄГҐ Г­Г  Г¤Г®ГЇГ°Г®Г±\nG. Г’Г°Г Г­Г±ГЇГ®Г°ГІГЁГ°Г®ГўГЄГ  Г­Г  Г¤Г®ГЇГ°Г®Г±]] },
+    [4] = { title = "ГЏГ®Г°ГїГ¤Г®ГЄ Г Г°ГҐГ±ГІГ ", content = [[1) ГЌГ Г¤ГҐГІГј Г­Г Г°ГіГ·Г­ГЁГЄГЁ\n2) Г€Г¤ГҐГ­ГІГЁГґГЁГ¶ГЁГ°Г®ГўГ ГІГј Г±ГҐГЎГї ГЁ ГЇГ®ГЄГ Г§Г ГІГј ГЄГ±ГЁГўГі ГЇГ°ГЁ Г§Г ГЇГ°Г®Г±ГҐ, ГҐГ±Г«ГЁ ГЅГІГ®ГЈГ® Г­ГҐ Г±Г¤ГҐГ«Г Г«ГЁ Г°Г Г­ГјГёГҐ\n3) Г‘Г®Г®ГЎГ№ГЁГІГј Г®Г±Г­Г®ГўГ Г­ГЁГї Г¤Г«Гї Г Г°ГҐГ±ГІГ . Г‚ГЂГ†ГЌГЋ: ГЏГ°ГЁ Г Г°ГҐГ±ГІГҐ ГЇГ® Г“ГЉ/Г„ГЉ - Г­Г Г§ГўГ ГІГј Г±ГІГ ГІГјГѕ (Г­Г®Г¬ГҐГ° ГЁГ«ГЁ Г­Г Г§ГўГ Г­ГЁГҐ)\n4) Г“Г§Г­Г ГІГј Гў Г°Г Г¬ГЄГ Гµ ГђГЏ Г«ГЁГ·Г­Г®Г±ГІГј Г Г°ГҐГ±ГІГ®ГўГ Г­Г­Г®ГЈГ®, ГҐГ±Г«ГЁ Г­ГҐ ГіГ§Г­Г Г«ГЁ Г°Г Г­ГҐГҐ.\n5) ГЋГЎГ»Г±ГЄ\n6) ГЊГЁГ°Г Г­Г¤Г \n7) Г‚Г»Г¤Г Г·Г  Г°Г®Г§Г»Г±ГЄГ , ГҐГ±Г«ГЁ Г­ГҐ ГўГ»Г¤Г Г«ГЁ Г°Г Г­ГҐГҐ\n8) Г’Г°Г Г­Г±ГЇГ®Г°ГІГЁГ°Г®ГўГЄГ  Гў ГЉГЏГ‡ ГЁГ«ГЁ Г¤Г®ГЇГ°Г®Г±Г­ГіГѕ\n9) ГЏГ®Г±Г Г¤ГЄГ  Гў ГЉГЏГ‡ ГЇГ°ГЁ Г­ГҐГ®ГЎГµГ®Г¤ГЁГ¬Г®Г±ГІГЁ\n\nГ€Г‘ГЉГ‹ГћГ—Г…ГЌГ€Г…: Г‚ Г±Г«ГіГ·Г ГҐ Г®ГЇГ Г±Г­Г®Г±ГІГЁ, Г¬Г®Г¦Г­Г® Г±Г­Г Г·Г Г«Г  ГЇГҐГ°ГҐГўГҐГ±ГІГЁ ГЁ ГІГ®Г«ГјГЄГ® ГЇГ®ГІГ®Г¬ Г­Г Г·Г ГІГј Г± ГЇГіГ­ГЄГІГ  2.\nГ€Г‘ГЉГ‹ГћГ—Г…ГЌГ€Г…: ГЊГЁГ°Г Г­Г¤Гі ГЁ Г°Г®Г§Г»Г±ГЄ Г¬Г®Г¦Г­Г® ГўГ»Г¤Г ГІГј ГўГ® ГўГ°ГҐГ¬Гї ГІГ°Г Г­Г±ГЇГ®Г°ГІГЁГ°Г®ГўГЄГЁ.\nГ€Г‘ГЉГ‹ГћГ—Г…ГЌГ€Г…: ГЊГЁГ°Г Г­Г¤Гі Г¬Г®Г¦Г­Г® Г§Г Г·ГЁГІГ ГІГј Г¤Г® ГіГ±ГІГ Г­Г®ГўГ«ГҐГ­ГЁГї Г«ГЁГ·Г­Г®Г±ГІГЁ.]] },
+    [5] = { title = "ГЏГ®Г°ГїГ¤Г®ГЄ Г Г°ГҐГ±ГІГ  ГЈГ®Г±. Г±Г®ГІГ°ГіГ¤Г­ГЁГЄГ ", content = [[1) ГЏГ® ГіГ±Г¬Г®ГІГ°ГҐГ­ГЁГѕ ГўГ»Г¤Г ГІГј Г°Г®Г§Г»Г±ГЄ Г± ГЇГ°ГЁГ·ГЁГ­Г®Г© 'Г‘Г‹Г…Г„Г‘Г’Г‚Г€Г…'\n2) Г…Г±Г«ГЁ Г Г°ГҐГ±ГІГ®ГўГ Г­Г­Г®ГЈГ® ГЇГҐГ°ГҐГ¤Г Г«ГЁ ГЄГ®ГЇГ» - ГЇГ®Г«ГіГ·ГҐГ­ГЁГҐ Г®ГІ Г­ГЁГµ Г¤Г®ГЄГ Г§Г ГІГҐГ«ГјГ±ГІГў\n3) ГЊГЁГ°Г Г­Г¤Г \n4) ГЋГЎГ»Г±ГЄ\n5) Г‚ГҐГ§ВёГІГҐ Г­Г  Г¤Г®ГЇГ°Г®Г± ГЇГ® Г±ГўГ®ГҐГ¬Гі ГіГ±Г¬Г®ГІГ°ГҐГ­ГЁГѕ\n6) ГЏГ® Г®ГЄГ®Г­Г·Г Г­ГЁГѕ ГЇГ°Г®Г¶ГҐГ±Г±ГіГ Г«ГјГ­Г»Гµ Г¤ГҐГ©Г±ГІГўГЁГ© ГўГ»ГЎГЁГ°Г ГҐГІГҐ Г¬ГҐГ°Гі Г­Г ГЄГ Г§Г Г­ГЁГї\n7) Г…Г±Г«ГЁ ГЇГ°ГЁГ¬ГҐГ­ВёГ­ Г Г°ГҐГ±ГІ Гў ГЉГЏГ‡, Гў ГІГҐГ·ГҐГ­ГЁГЁ 24 Г·Г Г±Г®Гў Г±Г®Г±ГІГ ГўГ«ГїГҐГІГҐ ГЉГ” Г­Г  ГґГ®Г°ГіГ¬]] },
+    [6] = { title = "ГЋГ±Г­Г®ГўГ Г­ГЁГї Г¤Г®ГЇГ°Г®Г±Г ", content = [[Г„Г®ГЇГ°Г®Г± ГЇГ°Г®ГўГ®Г¤ГЁГІГ±Гї Г­Г  Г®Г±Г­Г®ГўГ Г­ГЁГЁ ГЇГіГ­ГЄГІГ  X, Г±ГІГ ГІГјГЁ 1, Г°Г Г§Г¤ГҐГ«Г  2, Г·Г Г±ГІГЁ 2 ГЏГЉ.\n\nA. Г„Г®ГЇГ°Г®Г± Г Г°ГҐГ±ГІГ®ГўГ Г­Г­Г®ГЈГ® Г«ГЁГ¶Г \nB. ГЋГ°Г¤ГҐГ° Г­Г  ГЇГ°Г®ГўГҐГ¤ГҐГ­ГЁГҐ Г¤Г®ГЇГ°Г®Г±Г \nC. ГЌГ Г«ГЁГ·ГЁГҐ Г®Г±Г­Г®ГўГ Г­ГЁГ© ГЇГ®Г«Г ГЈГ ГІГј, Г·ГІГ® Гі Г«ГЁГ¶Г  ГҐГ±ГІГј ГЁГ­ГґГ®Г°Г¬Г Г¶ГЁГї\nD. ГЌГ  Г«ГЁГ¶Г® Г®ГІГЄГ°Г»ГІ ГЉГ”. ГЏГ® Г§Г ГЇГ°Г®Г±Гі ГЇГ°ГҐГ¤Г®Г±ГІГ ГўГЁГІГј Г¬Г ГІГҐГ°ГЁГ Г«Г» ГЁ Г®ГЇГіГЎГ«ГЁГЄГ®ГўГ ГІГј ГЉГ” Г­Г  ГґГ®Г°ГіГ¬ГҐ Гў ГІГҐГ·ГҐГ­ГЁГЁ 24 Г·Г Г±Г®Гў\nE. ГЏГ®ГўГҐГ±ГІГЄГ  Г­Г  Г¤Г®ГЇГ°Г®Г±, Г®ГЇГіГЎГ«ГЁГЄГ®ГўГ Г­Г­Г Гї Г­Г  ГґГ®Г°ГіГ¬ГҐ]] },
+    [7] = { title = "ГЏГ®Г°ГїГ¤Г®ГЄ ГЇГ°Г®ГўГҐГ¤ГҐГ­ГЁГї Г¤Г®ГЇГ°Г®Г±Г ", content = [[1) Г“Г±Г Г¤ГЁГІГј Г·ГҐГ«Г®ГўГҐГЄГ  Г­Г  Г±ГІГіГ«, Г®Г¤Г­Гі Г°ГіГЄГі ГЇГ°ГЁГЄГ®ГўГ ГІГј ГЄ Г±ГІГ®Г«Гі, ГўГІГ®Г°ГіГѕ Г®Г±ГІГ ГўГЁГІГј Г±ГўГ®ГЎГ®Г¤Г­Г®Г©\n2) Г‚ГЄГ«ГѕГ·ГЁГІГј ГЄГ Г¬ГҐГ°Гі Гў Г¤Г®ГЇГ°Г®Г±Г­Г®Г©\n3) ГЌГ Г§ГўГ ГІГј Г¤Г ГІГі ГЁ ГўГ°ГҐГ¬Гї Г­Г Г·Г Г«Г  Г¤Г®ГЇГ°Г®Г±Г . ГЏГ°ГЁГ¬ГҐГ°: Г„Г®ГЇГ°Г®Г± ГЇГ°Г®ГўГ®Г¤ГЁГІГ±Гї 15 ГЁГѕГ«Гї 2025 Гў 16:30\n4) Г‘Г®Г®ГЎГ№ГЁГІГј ГЄГІГ® ГЇГ°Г®ГўГ®Г¤ГЁГІ Г¤Г®ГЇГ°Г®Г± ГЁ Г­Г Г§ГўГ ГІГј ГЇГ®Г§Г»ГўГ­Г®Г©. ГЏГ°ГЁГ¬ГҐГ°: Г„Г®ГЇГ°Г®Г± ГЇГ°Г®ГўГ®Г¤ГЁГІ Г ГЈГҐГ­ГІ Г‘Г«Г®Г­ГїГ°Г \n5) Г“ГЄГ Г§Г ГІГј ГЄГІГ® Г¤Г®ГЇГ°Г ГёГЁГўГ ГҐГІГ±Гї ГЁ Гў ГЄГ ГЄГ®Г¬ Г±ГІГ ГІГіГ±ГҐ (Г±ГўГЁГ¤ГҐГІГҐГ«Гј/ГЇГ®Г¤Г®Г§Г°ГҐГўГ ГҐГ¬Г»Г©/ГЇГ®ГІГҐГ°ГЇГҐГўГёГЁГ©). ГЏГ°ГЁГ¬ГҐГ°: Г„Г®ГЇГ°Г ГёГЁГўГ ГҐГІ Г’Г®Г¬ ГЉГ°ГіГ§ ГЄГ ГЄ Г±ГўГЁГ¤ГҐГІГҐГ«Гј.\n6) ГЊГЁГ°Г Г­Г¤Г \n7) Г“ГІГ®Г·Г­ГїГҐГ¬ Г¦ГҐГ«Г ГҐГІ-Г«ГЁ Г¤Г®ГЇГ°Г ГёГЁГўГ ГҐГ¬Г»Г© Г°ГҐГ Г«ГЁГ§Г®ГўГ ГІГј Г±ГўГ®ГЁ ГЇГ°Г ГўГ . Г…Г±Г«ГЁ ГІГ°ГҐГЎГіГҐГІ Г Г¤ГўГ®ГЄГ ГІГ  - /advokatdopros\n8) Г…Г±Г«ГЁ Г¤Г®ГЇГ°Г ГёГЁГўГ ГҐГ¬ ГЈГ®Г±Г­ГЁГЄГ  - ГЇГ® Г±ГўГ®ГҐГ¬Гі Г¦ГҐГ«Г Г­ГЁГѕ Г¬Г®Г¦Г­Г® ГіГўГҐГ¤Г®Г¬ГЁГІГј ГҐГЈГ® Г®Г°ГЈГ Г­ГЁГ§Г Г¶ГЁГѕ. Г‹ГЁГ¤ГҐГ° ГЁ Г§Г Г¬ ГЁГ¬ГҐГѕГІ ГЇГ°Г ГўГ® ГЇГ°ГЁГ±ГіГІГ±ГІГўГ®ГўГ ГІГј Г­Г  Г¤Г®ГЇГ°Г®Г±ГҐ.\n9) Г“ГўГҐГ¤Г®Г¬Г«ГїГҐГ¬ Г Г¤ГўГ®ГЄГ ГІГ , Г¤Г®ГЇГ°Г ГёГЁГўГ ГҐГ¬Г®ГЈГ® ГЁ ГҐГЈГ® Г«ГЁГ¤ГҐГ°Г /Г§Г Г¬Г  Г®ГЎ Г®ГІГўГҐГІГ±ГІГўГҐГ­Г­Г®Г±ГІГЁ Г§Г  Г°Г Г§ГЈГ«Г ГёГҐГ­ГЁГҐ ГЈГ®Г±.ГІГ Г©Г­Г»\nГЋГІ Г Г¤ГўГ®ГЄГ ГІГ  ГЁ Г«ГЁГ¤ГҐГ°Г /Г§Г Г¬Г  Г®ГЎГїГ§Г ГІГҐГ«ГјГ­Г® ГІГ°ГҐГЎГіГҐГ¬ ГЇГ®Г¤ГЇГЁГ±Г ГІГј ГіГўГҐГ¤Г®Г¬Г«ГҐГ­ГЁГҐ, ГЇГ°ГЁ Г®ГІГЄГ Г§ГҐ - ГўГ»ГЈГ®Г­ГїГҐГ¬ Г± Г¤Г®ГЇГ°Г®Г±Г­Г®Г©.\n11) Г‡Г Г¤Г ВёГ¬ ГўГ®ГЇГ°Г®Г±Г», ГЄГ®ГІГ®Г°Г»ГҐ Г±Г·ГЁГІГ ГҐГ¬ Г­ГіГ¦Г­Г»Г¬\n12) Г‚ ГЄГ®Г­Г¶ГҐ Г¤Г®ГЇГ°Г®Г±Г  Г®ГЇГ®ГўГҐГ№Г ГҐГ¬ Г® Г§Г ГўГҐГ°ГёГҐГ­ГЁГЁ Г¤Г®ГЇГ°Г®Г±Г  ГЁ ГўГ»ГЄГ«ГѕГ·Г ГҐГ¬ ГЄГ Г¬ГҐГ°Гі.\n13) Г‚Г»ГўГ®Г¤ГЁГ¬ Г¤Г®ГЇГ°Г ГёГЁГўГ ГҐГ¬Г®ГЈГ®, ГҐГЈГ® Г«ГЁГ¤ГҐГ°Г /Г§Г Г¬Г  ГЁ Г Г¤ГўГ®ГЄГ ГІГ  Г± Г¬ГҐГёГЄГ®Г¬ Г­Г  ГЈГ®Г«Г®ГўГҐ ГЁГ§ Г®ГґГЁГ±Г . ГЏГ°ГЁ Г­ГҐГ®ГЎГµГ®Г¤ГЁГ¬Г®Г±ГІГЁ Г®ГІГўГ®Г§ГЁГ¬ Гў ГЉГЏГ‡.]] },
+    [8] = { title = "ГЂГ¤ГўГ®ГЄГ ГІ Г­Г  Г¤Г®ГЇГ°Г®Г±ГҐ", content = [[ГЏГ°ГЁ ГЇГ®Г±ГІГіГЇГ«ГҐГ­ГЁГЁ ГІГ°ГҐГЎГ®ГўГ Г­ГЁГї - Г§Г ГЇГ°Г ГёГЁГўГ ГҐГ¬ Г Г¤ГўГ®ГЄГ ГІГ  Гў /d Гі ГЇГ°Г ГўГЁГІГҐГ«ГјГ±ГІГўГ . Г…Г±Г«ГЁ Гў ГІГҐГ·ГҐГ­ГЁГЁ 5 Г¬ГЁГ­ГіГІ...\n...Г± Г¬Г®Г¬ГҐГ­ГІГ  ГЏГ…ГђГ‚ГЋГѓГЋ Г§Г ГЇГ°Г®Г±Г  Г®ГІГўГҐГІГ  Г­ГҐ ГЇГ®Г±Г«ГҐГ¤Г®ГўГ Г«Г® - ГЇГ°Г®Г¤Г®Г«Г¦Г ГҐГ¬ ГЎГҐГ§ Г Г¤ГўГ®ГЄГ ГІГ . ГЂГ­Г Г«Г®ГЈГЁГ·Г­Г® Г¤ГҐГ«Г ГҐГ¬ ГЇГ°ГЁ Г®ГІГ°ГЁГ¶Г ГІГҐГ«ГјГ­Г®Г¬ Г®ГІГўГҐГІГҐ.\nГ…Г±Г«ГЁ Г Г¤ГўГ®ГЄГ ГІ ГўГ»ГёГҐГ« Г­Г  Г±ГўГїГ§Гј - Г¦Г¤ВёГ¬ ГЇГ®ГЄГ  Г®Г­ ГЇГ°ГЁГҐГ¤ГҐГІ Гў ГІГҐГ·ГҐГ­ГЁГЁ 10 Г¬ГЁГ­ГіГІ. ГЏГ® ГЁГ±ГІГҐГ·ГҐГ­ГЁГЁ ГЅГІГ®ГЈГ® ГўГ°ГҐГ¬ГҐГ­ГЁ - ГЇГ°Г®Г¤Г®Г«Г¦Г ГҐГ¬ ГЎГҐГ§ Г Г¤ГўГ®ГЄГ ГІГ .\nГЏГ°ГЁ ГЇГ°ГЁГЎГ»ГІГЁГЁ Г Г¤ГўГ®ГЄГ ГІГ  ГЇГ°Г®ГўГҐГ°ГїГҐГ¬ Гі Г­ГҐГЈГ® ГЇГ Г±ГЇГ®Г°ГІ, Г­Г Г«ГЁГ·ГЁГҐ Г«ГЁГ¶ГҐГ­Г§ГЁГЁ ГЁ 5+ Г°Г Г­ГЈГ  Гў ГЇГ°Г ГўГЁГІГҐГ«ГјГ±ГІГўГҐ.\nГЏГҐГ°ГҐГ¤ Г§Г ГўГ®Г¤Г®Г¬ Гў Г®ГґГЁГ± Г®ГЎГ»Г±ГЄГЁГўГ ГҐГ¬ ГЁ Г®ГІГЎГЁГ°Г ГҐГ¬ Гі Г Г¤ГўГ®ГЄГ ГІГ  ГІГҐГ«ГҐГґГ®Г­, ГЄГ Г¬ГҐГ°Гі, Г¤ГЁГЄГІГ®ГґГ®Г­ ГЁ ГІ.ГЇ., Г­Г Г¤ГҐГўГ ГҐГ¬ Г¬ГҐГёГ®ГЄ.\nГ…Г±Г«ГЁ Гі Г Г¤ГўГ®ГЄГ ГІГ  Г­Г ГёГ«ГЁ Г§Г ГЇГ°ГҐГ№ВёГ­ГЄГі - Г Г°ГҐГ±ГІГ®ГўГ»ГўГ ГҐГ¬ Г Г¤ГўГ®ГЄГ ГІГ .\nГЂГ¤ГўГ®ГЄГ ГІ ГЁГ¬ГҐГҐГІ ГЇГ°Г ГўГ® Г­Г  ГЇГ°ГЁГўГ ГІГ­Г»ГҐ ГЎГҐГ±ГҐГ¤Г». ГЋГЎГ№Г Гї ГЁГµ ГЇГ°Г®Г¤Г®Г«Г¦ГЁГІГҐГ«ГјГ­Г®Г±ГІГј - 20 Г¬ГЁГ­ГіГІ.]] },
+    [9] = { title = "ГЋГ±Г­Г®ГўГ Г­ГЁГї Г¤Г«Гї Г®ГЎГ»Г±ГЄГ ", content = [[ГЋГЎГ»Г±ГЄ Г­Г  Г®Г±Г­Г®ГўГ Г­ГЁГЁ ГЇГіГ­ГЄГІГ  X, Г±ГІГ ГІГјГЁ 1, Г°Г Г§Г¤ГҐГ«Г  3, Г·Г Г±ГІГЁ 1 ГЏГЉ\n\nA. ГЋГ°Г¤ГҐГ°\nB. ГЂГ°ГҐГ±ГІ\nC. ГЏГ°Г®ГўГҐГ¤ГҐГ­ГЁГҐ Г°ГҐГ©Г¤Г \nD. ГЉГ®Г­ГІГ°Г®Г«Гј Г­Г  ГЎГ«Г®ГЄГЇГ®Г±ГІГ Гµ\nE. Г‚ГµГ®Г¤ Гў Г§Г®Г­Гі Г®Г¶ГҐГЇГ«ГҐГ­ГЁГї\nF. Г‚ГµГ®Г¤ Г­Г  ГІГҐГ°Г°ГЁГІГ®Г°ГЁГѕ Г°ГҐГ¦ГЁГ¬Г­Г®ГЈГ® Г®ГЎГєГҐГЄГІГ \nG. Г„Г®ГЎГ°Г®ГўГ®Г«ГјГ­Г®ГҐ Г±Г®ГЈГ«Г Г±ГЁГҐ Г­Г  Г®ГЎГ»Г±ГЄ\nH. Г‡Г Г¤ГҐГ°Г¦Г Г­ГЁГҐ Гў Г±ГўГїГ§ГЁ Г± Г­Г®ГёГҐГ­ГЁГҐГ¬ ГЈГ°Г Г¦Г¤Г Г­ГЁГ­Г®Г¬ Г¬Г Г±ГЄГЁ\nI. Г‡Г Г¤ГҐГ°Г¦Г Г­ГЁГҐ ГЈГ®Г±Г­ГЁГЄГ  Гў Г±ГўГїГ§ГЁ Г± Г­Г Г°ГіГёГҐГ­ГЁГҐГ¬ ГіГ±ГІГ ГўГ  ГЁГ«ГЁ Г”ГЏ\nK. Г‡Г Г¤ГҐГ°Г¦Г Г­ГЁГҐ Гў Г±Г«ГіГ·Г ГҐ, ГҐГ±Г«ГЁ ГҐГ±ГІГј Г®Г±Г­Г®ГўГ Г­ГЁГї ГЇГ°ГҐГ¤ГЇГ®Г«Г ГЈГ ГІГј, Г·ГІГ® Г§Г Г¤ГҐГ°Г¦Г Г­Г­Г»Г© Г±Г®ГўГҐГ°ГёГЁГ« ГЇГ°ГҐГ±ГІГіГЇГ«ГҐГ­ГЁГҐ\nL. Г‡Г Г¤ГҐГ°Г¦Г Г­ГЁГҐ Гў Г±Г«ГіГ·Г ГҐ, ГҐГ±Г«ГЁ Г§Г Г¤ГҐГ°Г¦Г Г­Г­Г»Г© ГіГЇГ®ГІГ°ГҐГЎГЁГ« Г­Г Г°ГЄГ® ГЁГ«ГЁ Г Г«ГЄГ®ГЈГ®Г«Гј Г­Г  ГЈГ«Г Г§Г Гµ Г ГЈГҐГ­ГІГ \nM. ГЏГ°Г®ГўГҐГ¤ГҐГ­ГЁГҐ ГЇГ°Г®ГўГҐГ°ГЄГЁ ГЈГ®Г± Г®Г°ГЈГ Г­ГЁГ§Г Г¶ГЁГЁ\n\nГ‚ГЂГ†ГЌГЋ: ГЋГЎГ»Г±ГЄ Г¤ГҐГ«Г ГҐГІГ±Гї Г‚ ГЏГ…ГђГ—ГЂГ’ГЉГЂГ•!]] },
+    [10] = { title = "ГЋГ±Г­Г®ГўГ Г­ГЁГї Г¤Г«Гї Г°ГҐГ©Г¤Г®Гў", content = [[ГђГҐГ©Г¤ ГѓГ…Г’Г’ГЋ - Г‘ГІГ ГІГјГї 2, Г°Г Г§Г¤ГҐГ« 5, Г·Г Г±ГІГЁ 2 ГЏГЉ. [ГЌГіГ¦ГҐГ­ Г®Г°Г¤ГҐГ°]\nГђГҐГ©Г¤ ГЏГђГ€Г’ГЋГЌГЂ - Г‘ГІГ ГІГјГї 3, Г°Г Г§Г¤ГҐГ« 5, Г·Г Г±ГІГЁ 2 ГЏГЉ\nГђГҐГ©Г¤ ГЋГЏГѓ - Г‘ГІГ ГІГјГї 4, Г°Г Г§Г¤ГҐГ« 5, Г·Г Г±ГІГЁ 2 ГЏГЉ [ГЌГіГ¦ГҐГ­ Г®Г°Г¤ГҐГ°]\nГђГҐГ©Г¤ Г‘Г’ГЋ - Г‘ГІГ ГІГјГї 5, Г°Г Г§Г¤ГҐГ« 5, Г·Г Г±ГІГЁ 2 ГЏГЉ\nГђГҐГ©Г¤ ГѓГђГ“Г‡ГЋГЏГ…ГђГ…Г‚ГЋГ‡ГЋГЉ - Г‘ГІГ ГІГјГї 6, Г°Г Г§Г¤ГҐГ« 5, Г·Г Г±ГІГЁ 2 ГЏГЉ [ГЌГіГ¦ГҐГ­ Г®Г°Г¤ГҐГ°]\nГђГҐГ©Г¤ ГЏГЂГ’ГђГ“Г‹Г…Г‰ - Г‘ГІГ ГІГјГї 7, Г°Г Г§Г¤ГҐГ« 5, Г·Г Г±ГІГЁ 2 ГЏГЉ\nГђГҐГ©Г¤ Г‹ГЂГ‚ГЋГЉ Г–Гђ/Г–Гѓ - Г‘ГІГ ГІГјГї 8, Г°Г Г§Г¤ГҐГ« 5, Г·Г Г±ГІГЁ 2 ГЏГЉ\nГђГҐГ©Г¤ ГѓГЋГ‘.ГЋГђГѓ - Г‘ГІГ ГІГјГї 9, Г°Г Г§Г¤ГҐГ« 5, Г·Г Г±ГІГЁ 2 ГЏГЉ [ГЌГіГ¦ГҐГ­ Г®Г°Г¤ГҐГ°]\nГђГҐГ©Г¤ ГЌГЂГђГЉГЋГ’ГђГЂГ”Г€ГЉГЂ - Г‘ГІГ ГІГјГї 10, Г°Г Г§Г¤ГҐГ« 5, Г·Г Г±ГІГЁ 2 ГЏГЉ]] },
+    [11] = { title = "ГЋГ±Г­Г®ГўГ Г­ГЁГї ГЇГ°Г ГўГЁГ« ГЎГҐГ§Г®ГЇГ Г±Г­Г®Г±ГІГЁ", content = [[6 Г¬ГҐГІГ°Г®Гў - Г±ГІГ ГІГјГї 1, Г°Г Г§Г¤ГҐГ« 5, Г·Г Г±ГІГЁ 1 ГЏГЉ\n3 ГЇГ®ГўГ®Г°Г®ГІГ  - Г±ГІГ ГІГјГї 1, Г°Г Г§Г¤ГҐГ« 5, Г·Г Г±ГІГЁ 1 ГЏГЉ]] }
 }
 
 for i = 1, 11 do
@@ -1397,7 +1433,7 @@ for i = 1, 11 do
         function()
             imgui.SetNextWindowSize(imgui.ImVec2(520, 480), imgui.Cond.FirstUseEver)
             imgui.SetNextWindowPos(imgui.ImVec2(sizeX/2, sizeY/2), imgui.Cond.FirstUseEver, imgui.ImVec2(0.5, 0.5))
-            local title = menuData[i] and menuData[i].title or ("Информация " .. i)
+            local title = menuData[i] and menuData[i].title or ("Г€Г­ГґГ®Г°Г¬Г Г¶ГЁГї " .. i)
             imgui.Begin(u8(title), showMenu[i], imgui.WindowFlags.NoCollapse)
             imgui.PushStyleColor(imgui.Col.Text, imgui.ImVec4(0.11, 0.42, 0.87, 1.00))
             imgui.TextWrapped(u8(title))
@@ -1414,7 +1450,7 @@ for i = 1, 11 do
             imgui.EndChild()
             imgui.Spacing()
             imgui.Separator()
-            if createStyledButton("Закрыть", 100, 32, true) then
+            if createStyledButton("Г‡Г ГЄГ°Г»ГІГј", 100, 32, true) then
                 showMenu[i][0] = false
             end
             imgui.End()
@@ -1422,13 +1458,13 @@ for i = 1, 11 do
     )
 end
 
--- Окно пасхалки
+-- ГЋГЄГ­Г® ГЇГ Г±ГµГ Г«ГЄГЁ
 imgui.OnFrame(
     function() return showEasterEgg[0] end,
     function()
         imgui.SetNextWindowSize(imgui.ImVec2(520, 420), imgui.Cond.FirstUseEver)
         imgui.SetNextWindowPos(imgui.ImVec2(sizeX/2, sizeY/2), imgui.Cond.FirstUseEver, imgui.ImVec2(0.5, 0.5))
-        imgui.Begin(u8("Пасхалка"), showEasterEgg, imgui.WindowFlags.NoCollapse)
+        imgui.Begin(u8("ГЏГ Г±ГµГ Г«ГЄГ "), showEasterEgg, imgui.WindowFlags.NoCollapse)
         imgui.PushStyleColor(imgui.Col.Text, imgui.ImVec4(0.95, 0.75, 0.35, 1.00))
         imgui.TextWrapped(u8(""))
         imgui.PopStyleColor()
@@ -1447,7 +1483,7 @@ imgui.OnFrame(
             imgui.BeginChild("EasterEggText", imgui.ImVec2(0, 0), true)
             imgui.PushStyleColor(imgui.Col.Text, imgui.ImVec4(0.90, 0.90, 0.90, 1.00))
             imgui.PushTextWrapPos(0)
-            imgui.TextWrapped(u8("Чтобы добавить картинку, поместите файл 'image.png' в папку:"))
+            imgui.TextWrapped(u8("Г—ГІГ®ГЎГ» Г¤Г®ГЎГ ГўГЁГІГј ГЄГ Г°ГІГЁГ­ГЄГі, ГЇГ®Г¬ГҐГ±ГІГЁГІГҐ ГґГ Г©Г« 'image.png' Гў ГЇГ ГЇГЄГі:"))
             imgui.TextColored(imgui.ImVec4(0.95, 0.75, 0.35, 1.00), u8("   " .. configDirectory))
             imgui.PopTextWrapPos()
             imgui.PopStyleColor()
@@ -1457,14 +1493,14 @@ imgui.OnFrame(
         imgui.Separator()
         imgui.Spacing()
         imgui.SetCursorPosX((imgui.GetWindowWidth() - 100) / 2)
-        if createStyledButton("Закрыть", 100, 32, true) then
+        if createStyledButton("Г‡Г ГЄГ°Г»ГІГј", 100, 32, true) then
             showEasterEgg[0] = false
         end
         imgui.End()
     end
 )
 
--- ==================== УМНАЯ ВЫДАЧА ВЫГОВОРА ====================
+-- ==================== Г“ГЊГЌГЂГџ Г‚Г›Г„ГЂГ—ГЂ Г‚Г›ГѓГЋГ‚ГЋГђГЂ ====================
 local path_gwarn_json = configDirectory .. "/gwarn.json"
 local ustav_data = {}
 local ustav_names = {}
@@ -1483,7 +1519,7 @@ function load_ustav_from_json()
                     for i, ustav in ipairs(ustav_data) do
                         if ustav.name then table.insert(ustav_names, ustav.name) end
                     end
-                    print('[Snatch Helper] Загружено уставов: ' .. #ustav_data)
+                    print('[Snatch Helper] Г‡Г ГЈГ°ГіГ¦ГҐГ­Г® ГіГ±ГІГ ГўГ®Гў: ' .. #ustav_data)
                 else
                     ustav_data = {}
                 end
@@ -1514,20 +1550,20 @@ end
 function sendGwarnWithRoleplay(playerId, reason)
     if isActiveCommand then return false end
     isActiveCommand = true
-    sampSendChat("/do КПК находится на поясном держателе.")
+    sampSendChat("/do ГЉГЏГЉ Г­Г ГµГ®Г¤ГЁГІГ±Гї Г­Г  ГЇГ®ГїГ±Г­Г®Г¬ Г¤ГҐГ°Г¦Г ГІГҐГ«ГҐ.")
     wait(1500)
-    sampSendChat("/me берёт в руки свой КПК и включает его")
+    sampSendChat("/me ГЎГҐГ°ВёГІ Гў Г°ГіГЄГЁ Г±ГўГ®Г© ГЉГЏГЉ ГЁ ГўГЄГ«ГѕГ·Г ГҐГІ ГҐГЈГ®")
     wait(1500)
-    sampSendChat("/me заходит в базу данных и переходит в раздел управление сотрудниками других организаций")
+    sampSendChat("/me Г§Г ГµГ®Г¤ГЁГІ Гў ГЎГ Г§Гі Г¤Г Г­Г­Г»Гµ ГЁ ГЇГҐГ°ГҐГµГ®Г¤ГЁГІ Гў Г°Г Г§Г¤ГҐГ« ГіГЇГ°Г ГўГ«ГҐГ­ГЁГҐ Г±Г®ГІГ°ГіГ¤Г­ГЁГЄГ Г¬ГЁ Г¤Г°ГіГЈГЁГµ Г®Г°ГЈГ Г­ГЁГ§Г Г¶ГЁГ©")
     wait(1500)
-    sampSendChat("/me открывает дело нужного сотрудника и вносит в него изменения")
+    sampSendChat("/me Г®ГІГЄГ°Г»ГўГ ГҐГІ Г¤ГҐГ«Г® Г­ГіГ¦Г­Г®ГЈГ® Г±Г®ГІГ°ГіГ¤Г­ГЁГЄГ  ГЁ ГўГ­Г®Г±ГЁГІ Гў Г­ГҐГЈГ® ГЁГ§Г¬ГҐГ­ГҐГ­ГЁГї")
     wait(1500)
-    sampSendChat("/do Изменения успешно сохранены.")
+    sampSendChat("/do Г€Г§Г¬ГҐГ­ГҐГ­ГЁГї ГіГ±ГЇГҐГёГ­Г® Г±Г®ГµГ°Г Г­ГҐГ­Г».")
     wait(1500)
-    sampSendChat("/me выходит с базы данных и выключив КПК убирает его на поясной держатель")
+    sampSendChat("/me ГўГ»ГµГ®Г¤ГЁГІ Г± ГЎГ Г§Г» Г¤Г Г­Г­Г»Гµ ГЁ ГўГ»ГЄГ«ГѕГ·ГЁГў ГЉГЏГЉ ГіГЎГЁГ°Г ГҐГІ ГҐГЈГ® Г­Г  ГЇГ®ГїГ±Г­Г®Г© Г¤ГҐГ°Г¦Г ГІГҐГ«Гј")
     wait(1500)
     local command = string.format("/me %d %s", playerId, reason)
-    print("[Snatch Helper] Отправляется команда: " .. command)
+    print("[Snatch Helper] ГЋГІГЇГ°Г ГўГ«ГїГҐГІГ±Гї ГЄГ®Г¬Г Г­Г¤Г : " .. command)
     print("[DEBUG] reason = '" .. tostring(reason) .. "'")
     sampSendChat(command)
     isActiveCommand = false
@@ -1539,18 +1575,18 @@ imgui.OnFrame(
     function()
         imgui.SetNextWindowPos(imgui.ImVec2(sizeX/2, sizeY/2), imgui.Cond.FirstUseEver, imgui.ImVec2(0.5,0.5))
         imgui.SetNextWindowSize(imgui.ImVec2(520,480), imgui.Cond.FirstUseEver)
-        imgui.Begin(u8("Выбор устава для выговора"), SumMenuWindow, imgui.WindowFlags.NoCollapse)
+        imgui.Begin(u8("Г‚Г»ГЎГ®Г° ГіГ±ГІГ ГўГ  Г¤Г«Гї ГўГ»ГЈГ®ГўГ®Г°Г "), SumMenuWindow, imgui.WindowFlags.NoCollapse)
         imgui.PushStyleColor(imgui.Col.Text, imgui.ImVec4(0.11,0.42,0.87,1))
-        imgui.TextWrapped(u8("Выдача специального выговора"))
+        imgui.TextWrapped(u8("Г‚Г»Г¤Г Г·Г  Г±ГЇГҐГ¶ГЁГ Г«ГјГ­Г®ГЈГ® ГўГ»ГЈГ®ГўГ®Г°Г "))
         imgui.PopStyleColor()
         imgui.Spacing(); imgui.Separator(); imgui.Spacing()
-        imgui.Text(u8("ID игрока: " .. tostring(selectedPlayerId)))
-        imgui.Text(u8("Имя игрока: " .. selectedPlayerName))
+        imgui.Text(u8("ID ГЁГЈГ°Г®ГЄГ : " .. tostring(selectedPlayerId)))
+        imgui.Text(u8("Г€Г¬Гї ГЁГЈГ°Г®ГЄГ : " .. selectedPlayerName))
         imgui.Spacing(); imgui.Separator(); imgui.Spacing()
-        imgui.Text(u8("Выберите устав:"))
+        imgui.Text(u8("Г‚Г»ГЎГҐГ°ГЁГІГҐ ГіГ±ГІГ Гў:"))
         imgui.Spacing()
         if #ustav_data == 0 then
-            imgui.TextColored(imgui.ImVec4(0.9,0.2,0.2,1), u8("Уставы не загружены!"))
+            imgui.TextColored(imgui.ImVec4(0.9,0.2,0.2,1), u8("Г“Г±ГІГ ГўГ» Г­ГҐ Г§Г ГЈГ°ГіГ¦ГҐГ­Г»!"))
         else
             for i, name in ipairs(ustav_names) do
                 if createStyledButton(name, -1, 42) then
@@ -1562,7 +1598,7 @@ imgui.OnFrame(
             end
         end
         imgui.Spacing(); imgui.Separator()
-        if createStyledButton("Отмена", 100, 32) then SumMenuWindow[0] = false end
+        if createStyledButton("ГЋГІГ¬ГҐГ­Г ", 100, 32) then SumMenuWindow[0] = false end
         imgui.End()
     end
 )
@@ -1573,16 +1609,16 @@ for idx, ustav in ipairs(ustav_data) do
         function()
             imgui.SetNextWindowSize(imgui.ImVec2(1500,700), imgui.Cond.FirstUseEver)
             imgui.SetNextWindowPos(imgui.ImVec2(sizeX/2,sizeY/2), imgui.Cond.FirstUseEver, imgui.ImVec2(0.5,0.5))
-            imgui.Begin(u8(ustav.name .. " - выбор пункта"), showUstavMenu[idx], imgui.WindowFlags.NoCollapse)
+            imgui.Begin(u8(ustav.name .. " - ГўГ»ГЎГ®Г° ГЇГіГ­ГЄГІГ "), showUstavMenu[idx], imgui.WindowFlags.NoCollapse)
             imgui.PushStyleColor(imgui.Col.Text, imgui.ImVec4(0.11,0.42,0.87,1))
-            imgui.TextWrapped(u8(ustav.name .. " - выбор пункта"))
+            imgui.TextWrapped(u8(ustav.name .. " - ГўГ»ГЎГ®Г° ГЇГіГ­ГЄГІГ "))
             imgui.PopStyleColor()
             if not ustav.item or #ustav.item == 0 then
-                imgui.TextColored(imgui.ImVec4(0.9,0.2,0.2,1), u8("Пункты не загружены!"))
+                imgui.TextColored(imgui.ImVec4(0.9,0.2,0.2,1), u8("ГЏГіГ­ГЄГІГ» Г­ГҐ Г§Г ГЈГ°ГіГ¦ГҐГ­Г»!"))
             else
                 imgui.BeginChild("UstavItems", imgui.ImVec2(0,0), true)
                 for i, item in ipairs(ustav.item) do
-                    local btnText = item.reason or "Пункт "..i
+                    local btnText = item.reason or "ГЏГіГ­ГЄГІ "..i
                     if item.reason and item.text then
                         local text = item.text:len() > 300 and item.text:sub(1,300).."..." or item.text
                         btnText = item.reason .. " - " .. text
@@ -1596,7 +1632,7 @@ for idx, ustav in ipairs(ustav_data) do
                 imgui.EndChild()
             end
             imgui.Spacing(); imgui.Separator()
-            if createStyledButton("Назад", 100, 32) then
+            if createStyledButton("ГЌГ Г§Г Г¤", 100, 32) then
                 showUstavMenu[idx][0] = false
                 SumMenuWindow[0] = true
             end
@@ -1605,7 +1641,7 @@ for idx, ustav in ipairs(ustav_data) do
     )
 end
 
--- ==================== УМНАЯ ВЫДАЧА РОЗЫСКА ====================
+-- ==================== Г“ГЊГЌГЂГџ Г‚Г›Г„ГЂГ—ГЂ ГђГЋГ‡Г›Г‘ГЉГЂ ====================
 local path_uk_json = configDirectory .. "/uk.json"
 local uk_data = {}
 local uk_names = {}
@@ -1624,7 +1660,7 @@ function load_uk_from_json()
                     for i, sec in ipairs(uk_data) do
                         if sec.name then table.insert(uk_names, sec.name) end
                     end
-                    print('[Snatch Helper] Загружено разделов УК: ' .. #uk_data)
+                    print('[Snatch Helper] Г‡Г ГЈГ°ГіГ¦ГҐГ­Г® Г°Г Г§Г¤ГҐГ«Г®Гў Г“ГЉ: ' .. #uk_data)
                 else
                     uk_data = {}
                 end
@@ -1648,17 +1684,17 @@ local isActiveWantedCommand = false
 function sendWantedWithRoleplay(playerId, reason)
     if isActiveWantedCommand then return false end
     isActiveWantedCommand = true
-    sampSendChat("/do КПК находится на поясном держателе.")
+    sampSendChat("/do ГЉГЏГЉ Г­Г ГµГ®Г¤ГЁГІГ±Гї Г­Г  ГЇГ®ГїГ±Г­Г®Г¬ Г¤ГҐГ°Г¦Г ГІГҐГ«ГҐ.")
     wait(1500)
-    sampSendChat("/me берёт в руки свой КПК и включает его")
+    sampSendChat("/me ГЎГҐГ°ВёГІ Гў Г°ГіГЄГЁ Г±ГўГ®Г© ГЉГЏГЉ ГЁ ГўГЄГ«ГѕГ·Г ГҐГІ ГҐГЈГ®")
     wait(1500)
-    sampSendChat("/me заходит в базу данных и переходит в раздел федерального розыска")
+    sampSendChat("/me Г§Г ГµГ®Г¤ГЁГІ Гў ГЎГ Г§Гі Г¤Г Г­Г­Г»Гµ ГЁ ГЇГҐГ°ГҐГµГ®Г¤ГЁГІ Гў Г°Г Г§Г¤ГҐГ« ГґГҐГ¤ГҐГ°Г Г«ГјГ­Г®ГЈГ® Г°Г®Г§Г»Г±ГЄГ ")
     wait(1500)
-    sampSendChat("/me открывает розыскное дело и вносит в него изменения")
+    sampSendChat("/me Г®ГІГЄГ°Г»ГўГ ГҐГІ Г°Г®Г§Г»Г±ГЄГ­Г®ГҐ Г¤ГҐГ«Г® ГЁ ГўГ­Г®Г±ГЁГІ Гў Г­ГҐГЈГ® ГЁГ§Г¬ГҐГ­ГҐГ­ГЁГї")
     wait(1500)
-    sampSendChat("/do Изменения успешно сохранены.")
+    sampSendChat("/do Г€Г§Г¬ГҐГ­ГҐГ­ГЁГї ГіГ±ГЇГҐГёГ­Г® Г±Г®ГµГ°Г Г­ГҐГ­Г».")
     wait(1500)
-    sampSendChat("/me выходит с базы данных и выключив КПК убирает его на поясной держатель")
+    sampSendChat("/me ГўГ»ГµГ®Г¤ГЁГІ Г± ГЎГ Г§Г» Г¤Г Г­Г­Г»Гµ ГЁ ГўГ»ГЄГ«ГѕГ·ГЁГў ГЉГЏГЉ ГіГЎГЁГ°Г ГҐГІ ГҐГЈГ® Г­Г  ГЇГ®ГїГ±Г­Г®Г© Г¤ГҐГ°Г¦Г ГІГҐГ«Гј")
     wait(1500)
     local command = string.format("/su %d %s", playerId, reason)
     sampSendChat(encoding.UTF8:decode(command))
@@ -1671,18 +1707,18 @@ imgui.OnFrame(
     function()
         imgui.SetNextWindowPos(imgui.ImVec2(sizeX/2, sizeY/2), imgui.Cond.FirstUseEver, imgui.ImVec2(0.5,0.5))
         imgui.SetNextWindowSize(imgui.ImVec2(1000,600), imgui.Cond.FirstUseEver)
-        imgui.Begin(u8("Умная выдача розыска"), WantedMenuWindow, imgui.WindowFlags.NoCollapse)
+        imgui.Begin(u8("Г“Г¬Г­Г Гї ГўГ»Г¤Г Г·Г  Г°Г®Г§Г»Г±ГЄГ "), WantedMenuWindow, imgui.WindowFlags.NoCollapse)
         imgui.PushStyleColor(imgui.Col.Text, imgui.ImVec4(0.87,0.11,0.11,1))
-        imgui.TextWrapped(u8("Выдача федерального розыска по статьям УК"))
+        imgui.TextWrapped(u8("Г‚Г»Г¤Г Г·Г  ГґГҐГ¤ГҐГ°Г Г«ГјГ­Г®ГЈГ® Г°Г®Г§Г»Г±ГЄГ  ГЇГ® Г±ГІГ ГІГјГїГ¬ Г“ГЉ"))
         imgui.PopStyleColor()
         imgui.Spacing(); imgui.Separator(); imgui.Spacing()
-        imgui.Text(u8("ID игрока: " .. tostring(selectedWantedPlayerId)))
-        imgui.Text(u8("Имя игрока: " .. selectedWantedPlayerName))
+        imgui.Text(u8("ID ГЁГЈГ°Г®ГЄГ : " .. tostring(selectedWantedPlayerId)))
+        imgui.Text(u8("Г€Г¬Гї ГЁГЈГ°Г®ГЄГ : " .. selectedWantedPlayerName))
         imgui.Spacing(); imgui.Separator(); imgui.Spacing()
-        imgui.Text(u8("Выберите раздел Уголовного Кодекса:"))
+        imgui.Text(u8("Г‚Г»ГЎГҐГ°ГЁГІГҐ Г°Г Г§Г¤ГҐГ« Г“ГЈГ®Г«Г®ГўГ­Г®ГЈГ® ГЉГ®Г¤ГҐГЄГ±Г :"))
         imgui.Spacing()
         if #uk_data == 0 then
-            imgui.TextColored(imgui.ImVec4(0.9,0.2,0.2,1), u8("Разделы УК не загружены!"))
+            imgui.TextColored(imgui.ImVec4(0.9,0.2,0.2,1), u8("ГђГ Г§Г¤ГҐГ«Г» Г“ГЉ Г­ГҐ Г§Г ГЈГ°ГіГ¦ГҐГ­Г»!"))
         else
             for i, name in ipairs(uk_names) do
                 if imgui.CollapsingHeader(u8(name)) then
@@ -1690,12 +1726,12 @@ imgui.OnFrame(
                     local section = uk_data[i]
                     if section and section.item then
                         for j, item in ipairs(section.item) do
-                            local btnText = item.reason or "Статья "..j
+                            local btnText = item.reason or "Г‘ГІГ ГІГјГї "..j
                             if item.reason and item.text then
                                 local text = item.text:len() > 120 and item.text:sub(1,120).."..." or item.text
                                 btnText = item.reason .. " - " .. text
                             end
-                            if item.lvl then btnText = btnText .. " (Ур."..item.lvl..")" end
+                            if item.lvl then btnText = btnText .. " (Г“Г°."..item.lvl..")" end
                             if createStyledButton(btnText, -1, 35) then
                                 WantedMenuWindow[0] = false
                                 lua_thread.create(function() sendWantedWithRoleplay(selectedWantedPlayerId, item.reason) end)
@@ -1710,12 +1746,12 @@ imgui.OnFrame(
         end
         imgui.Spacing(); imgui.Separator()
         imgui.SetCursorPosX(imgui.GetWindowWidth()/2-50)
-        if createStyledButton("Отмена", 100, 32, true) then WantedMenuWindow[0] = false end
+        if createStyledButton("ГЋГІГ¬ГҐГ­Г ", 100, 32, true) then WantedMenuWindow[0] = false end
         imgui.End()
     end
 )
 
--- ==================== ЗАГРУЗКА ТЕКСТУРЫ ПАСХАЛКИ ====================
+-- ==================== Г‡ГЂГѓГђГ“Г‡ГЉГЂ Г’Г…ГЉГ‘Г’Г“ГђГ› ГЏГЂГ‘Г•ГЂГ‹ГЉГ€ ====================
 imgui.OnInitialize(function()
     imgui.GetIO().IniFilename = nil
     setup_premium_style(settings.currentTheme)
@@ -1726,7 +1762,7 @@ imgui.OnInitialize(function()
     end
 end)
 
--- ==================== ОСНОВНОЙ ЦИКЛ ====================
+-- ==================== ГЋГ‘ГЌГЋГ‚ГЌГЋГ‰ Г–Г€ГЉГ‹ ====================
 function main()
     if not isSampLoaded() or not isSampfuncsLoaded() then return end
     while not isSampAvailable() do wait(100) end
@@ -1738,19 +1774,19 @@ function main()
                 selectedPlayerId = id
                 selectedPlayerName = getPlayerNameById(selectedPlayerId)
                 if selectedPlayerName == "ID_"..selectedPlayerId then
-                    sampAddChatMessage('[Snatch Helper] Игрок не найден!', message_color)
+                    sampAddChatMessage('[Snatch Helper] Г€ГЈГ°Г®ГЄ Г­ГҐ Г­Г Г©Г¤ГҐГ­!', message_color)
                     return
                 end
                 if #ustav_data == 0 then
-                    sampAddChatMessage('[Snatch Helper] Уставы не загружены!', message_color)
+                    sampAddChatMessage('[Snatch Helper] Г“Г±ГІГ ГўГ» Г­ГҐ Г§Г ГЈГ°ГіГ¦ГҐГ­Г»!', message_color)
                     return
                 end
                 SumMenuWindow[0] = true
             else
-                sampAddChatMessage('[Snatch Helper] Используйте /gw [ID игрока] (ID должен быть положительным числом)', message_color)
+                sampAddChatMessage('[Snatch Helper] Г€Г±ГЇГ®Г«ГјГ§ГіГ©ГІГҐ /gw [ID ГЁГЈГ°Г®ГЄГ ] (ID Г¤Г®Г«Г¦ГҐГ­ ГЎГ»ГІГј ГЇГ®Г«Г®Г¦ГЁГІГҐГ«ГјГ­Г»Г¬ Г·ГЁГ±Г«Г®Г¬)', message_color)
             end
         else
-            sampAddChatMessage('[Snatch Helper] Дождитесь завершения отыгровки!', message_color)
+            sampAddChatMessage('[Snatch Helper] Г„Г®Г¦Г¤ГЁГІГҐГ±Гј Г§Г ГўГҐГ°ГёГҐГ­ГЁГї Г®ГІГ»ГЈГ°Г®ГўГЄГЁ!', message_color)
         end
     end)
 
@@ -1761,27 +1797,27 @@ function main()
                 selectedWantedPlayerId = id
                 selectedWantedPlayerName = getPlayerNameById(selectedWantedPlayerId)
                 if selectedWantedPlayerName == "ID_"..selectedWantedPlayerId then
-                    sampAddChatMessage('[Snatch Helper] Игрок не найден!', message_color)
+                    sampAddChatMessage('[Snatch Helper] Г€ГЈГ°Г®ГЄ Г­ГҐ Г­Г Г©Г¤ГҐГ­!', message_color)
                     return
                 end
                 if #uk_data == 0 then
-                    sampAddChatMessage('[Snatch Helper] Разделы УК не загружены!', message_color)
+                    sampAddChatMessage('[Snatch Helper] ГђГ Г§Г¤ГҐГ«Г» Г“ГЉ Г­ГҐ Г§Г ГЈГ°ГіГ¦ГҐГ­Г»!', message_color)
                     return
                 end
                 WantedMenuWindow[0] = true
             else
-                sampAddChatMessage('[Snatch Helper] Используйте /uk [ID игрока] (ID должен быть положительным числом)', message_color)
+                sampAddChatMessage('[Snatch Helper] Г€Г±ГЇГ®Г«ГјГ§ГіГ©ГІГҐ /uk [ID ГЁГЈГ°Г®ГЄГ ] (ID Г¤Г®Г«Г¦ГҐГ­ ГЎГ»ГІГј ГЇГ®Г«Г®Г¦ГЁГІГҐГ«ГјГ­Г»Г¬ Г·ГЁГ±Г«Г®Г¬)', message_color)
             end
         else
-            sampAddChatMessage('[Snatch Helper] Дождитесь завершения отыгровки!', message_color)
+            sampAddChatMessage('[Snatch Helper] Г„Г®Г¦Г¤ГЁГІГҐГ±Гј Г§Г ГўГҐГ°ГёГҐГ­ГЁГї Г®ГІГ»ГЈГ°Г®ГўГЄГЁ!', message_color)
         end
     end)
 
-    sampAddChatMessage("{ff0000}[Snatch Helper] {ff4444}Скрипт загружен (v5.2)")
-    sampAddChatMessage("{ff0000}[Snatch Helper] {ff4444}Умная выдача выговора: /gw")
-    sampAddChatMessage("{ff0000}[Snatch Helper] {ff4444}Умная выдача розыска: /uk")
-    sampAddChatMessage("{ff0000}[Snatch Helper] {ff4444}Справочник и биндер: F3")
-    sampAddChatMessage("{ff0000}[Snatch Helper] {ff4444}Удачной смены!")
+    sampAddChatMessage("{ff0000}[Snatch Helper] {ff4444}Г‘ГЄГ°ГЁГЇГІ Г§Г ГЈГ°ГіГ¦ГҐГ­ (v5.2)")
+    sampAddChatMessage("{ff0000}[Snatch Helper] {ff4444}Г“Г¬Г­Г Гї ГўГ»Г¤Г Г·Г  ГўГ»ГЈГ®ГўГ®Г°Г : /gw")
+    sampAddChatMessage("{ff0000}[Snatch Helper] {ff4444}Г“Г¬Г­Г Гї ГўГ»Г¤Г Г·Г  Г°Г®Г§Г»Г±ГЄГ : /uk")
+    sampAddChatMessage("{ff0000}[Snatch Helper] {ff4444}Г‘ГЇГ°Г ГўГ®Г·Г­ГЁГЄ ГЁ ГЎГЁГ­Г¤ГҐГ°: F3")
+    sampAddChatMessage("{ff0000}[Snatch Helper] {ff4444}Г“Г¤Г Г·Г­Г®Г© Г±Г¬ГҐГ­Г»!")
 
     addEventHandler('onWindowMessage', function(msg, wparam)
         if msg == 256 or msg == 260 then
@@ -1799,7 +1835,7 @@ function main()
 
     while true do
         wait(0)
-        -- Стоп-клавиша
+        -- Г‘ГІГ®ГЇ-ГЄГ«Г ГўГЁГёГ 
         local stopPressed = false
         if settings.stopKeyMod == 0 then stopPressed = wasKeyPressed(settings.stopKey)
         elseif settings.stopKeyMod == 1 then stopPressed = isKeyDown(0x11) and wasKeyPressed(settings.stopKey)
@@ -1807,10 +1843,10 @@ function main()
         elseif settings.stopKeyMod == 3 then stopPressed = isKeyDown(0x12) and wasKeyPressed(settings.stopKey) end
         if stopPressed and activeBinder then
             stopCurrentBind = true
-            sampAddChatMessage("[Snatch Helper] Бинд остановлен", 0xFF0000)
+            sampAddChatMessage("[Snatch Helper] ГЃГЁГ­Г¤ Г®Г±ГІГ Г­Г®ГўГ«ГҐГ­", 0xFF0000)
         end
 
-        -- Горячие клавиши биндов (не работают при открытом чате)
+        -- ГѓГ®Г°ГїГ·ГЁГҐ ГЄГ«Г ГўГЁГёГЁ ГЎГЁГ­Г¤Г®Гў (Г­ГҐ Г°Г ГЎГ®ГІГ ГѕГІ ГЇГ°ГЁ Г®ГІГЄГ°Г»ГІГ®Г¬ Г·Г ГІГҐ)
         if not sampIsChatInputActive() and not sampIsDialogActive() then
             for key, list in pairs(keyToBind) do
                 for _, item in ipairs(list) do
@@ -1826,7 +1862,7 @@ function main()
             end
         end
 
-        -- Селектор
+        -- Г‘ГҐГ«ГҐГЄГІГ®Г°
         local selPressed = false
         if settings.selectorKeyMod == 0 then selPressed = isKeyDown(settings.selectorKey)
         elseif settings.selectorKeyMod == 1 then selPressed = isKeyDown(0x11) and isKeyDown(settings.selectorKey)
