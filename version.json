@@ -1,0 +1,21 @@
+{
+  "version": "1.0",
+  "changelog": "Релиз!",
+  "files": [
+    {
+      "name": "Snatch Helper.lua",
+      "type": "script",
+      "required": true
+    },
+    {
+      "name": "ustav.json",
+      "type": "config",
+      "required": false
+    },
+    {
+      "name": "uk.json",
+      "type": "config",
+      "required": false
+    }
+  ]
+}
