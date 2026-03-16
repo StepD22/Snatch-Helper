@@ -1,8 +1,8 @@
 ---@diagnostic disable: undefined-global, need-check-nil, lowercase-global, cast-local-type, unused-local
 script_name("Snatch Helper")
-script_description('Улучшенный помощник с биндером v13')
+script_description('')
 script_author("StepD")
-script_version("13.0")
+script_version("1.0")
 
 require('lib.moonloader')
 local encoding = require('encoding')
@@ -20,7 +20,7 @@ local sizeX, sizeY = getScreenResolution()
 -- КОНСТАНТЫ (в таблице для экономии locals)
 -- =========================================================================
 local C = {
-    SCRIPT_VERSION       = "1.2",
+    SCRIPT_VERSION       = "1.0",
     NOTIFICATION_DURATION = 4.5,
     NOTIFICATION_FADE    = 0.6,
     MAX_NOTIFICATIONS    = 6,
