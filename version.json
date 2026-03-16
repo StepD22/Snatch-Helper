@@ -1,6 +1,6 @@
 {
-  "version": "1.2",
-  "changelog": "Полнеценный релиз!",
+  "version": "1.0",
+  "changelog": "",
   "files": [
     {
       "name": "Snatch Helper.lua",
@@ -10,12 +10,12 @@
     {
       "name": "ustav.json",
       "type": "config",
-      "required": false
+      "required": true
     },
     {
       "name": "uk.json",
       "type": "config",
-      "required": false
+      "required": true
     }
   ]
 }
