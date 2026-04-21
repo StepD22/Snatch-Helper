@@ -1,9 +1,9 @@
 {
-  "version": "1.1",
+  "version": "1.0",
   "changelog": "",
   "files": [
     {
-      "name": "Snatch Helper.lua",
+      "name": "Snatch Helper.luac",
       "type": "script",
       "required": true
     },
