@@ -1,5 +1,5 @@
 {
-  "version": "1.0",
+  "version": "2.1",
   "changelog": "",
   "files": [
     {
@@ -10,12 +10,12 @@
     {
       "name": "ustav.json",
       "type": "config",
-      "required": true
+      "required": false
     },
     {
       "name": "uk.json",
       "type": "config",
-      "required": true
+      "required": false
     }
   ]
 }
